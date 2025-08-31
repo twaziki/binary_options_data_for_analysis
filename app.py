@@ -265,14 +265,15 @@ if uploaded_file is not None:
                         self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
                 
                 pdf = PDF()
-                pdf.add_font('NotoSerifJP', '', 'NotoSerifJP[wght].ttf', uni=True)
+                # フォント名を修正
+                pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
                 pdf.add_page()
                 pdf.set_font('NotoSerifJP', '', 12)
                 
                 for image_path in chart_images:
-                    # w=150に修正して画像を小さくします
-                    pdf.image(image_path, w=150)
-                    pdf.ln(10) # グラフ間の余白を追加します
+                    # グラフの幅をw=130に修正
+                    pdf.image(image_path, w=130)
+                    pdf.ln(10) # グラフ間の余白を追加
 
                 pdf_output = pdf.output(dest='S').encode('latin1')
                 st.download_button(
