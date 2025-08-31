@@ -156,12 +156,10 @@ if uploaded_file is not None:
 
             # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
             st.subheader("時間帯別取引頻度")
-            # --- ここから修正 ---
             # '取引時刻'を文字列に変換してJSON化エラーを防ぐ
             df['取引時刻(str)'] = df['取引時刻'].astype(str)
             trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引時刻(str)'].count().reset_index()
             trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
-            # --- ここまで修正 ---
             chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
                 y=alt.Y('取引数', title='取引数'),
