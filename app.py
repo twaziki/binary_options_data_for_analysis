@@ -416,3 +416,4 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
         st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
+
