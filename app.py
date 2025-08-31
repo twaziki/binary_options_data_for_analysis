@@ -87,9 +87,14 @@ if uploaded_file is not None:
 
             # --- 日時勝率推移 ---
             st.subheader("日時勝率推移")
-            daily_win_rate = df.groupby(df['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
-            daily_win_rate.columns = ['日付', '勝率']
-            daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
+            # --- 修正箇所: dfが空の場合のチェックを追加 ---
+            if not df.empty:
+                daily_win_rate = df.groupby(df['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
+                daily_win_rate.columns = ['日付', '勝率']
+                daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
+            else:
+                daily_win_rate = pd.DataFrame({'日付': [], '勝率': []})
+            # --- 修正箇所ここまで ---
             chart_line = alt.Chart(daily_win_rate).mark_line().encode(
                 x=alt.X('日付'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
@@ -103,8 +108,13 @@ if uploaded_file is not None:
 
             # --- 通貨ペア別勝率（色分け） ---
             st.subheader("通貨ペア別勝率")
-            pair_win_rate = df.groupby('取引銘柄')['結果(数値)'].mean().reset_index()
-            pair_win_rate.columns = ['通貨ペア', '勝率']
+            # --- 修正箇所: reindexによる補完を追加 ---
+            if not df['取引銘柄'].empty:
+                pair_win_rate = df.groupby('取引銘柄')['結果(数値)'].mean().reindex(df['取引銘柄'].unique(), fill_value=0).reset_index()
+                pair_win_rate.columns = ['通貨ペア', '勝率']
+            else:
+                pair_win_rate = pd.DataFrame({'通貨ペア': [], '勝率': []})
+            # --- 修正箇所ここまで ---
             chart_pair = alt.Chart(pair_win_rate).mark_bar().encode(
                 x=alt.X('通貨ペア'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
@@ -119,8 +129,13 @@ if uploaded_file is not None:
 
             # --- 取引方向別勝率（色分け） ---
             st.subheader("取引方向別勝率")
-            direction_win_rate = df.groupby('HIGH/LOW')['結果(数値)'].mean().reset_index()
-            direction_win_rate.columns = ['取引方向', '勝率']
+            # --- 修正箇所: reindexによる補完を追加 ---
+            if not df['HIGH/LOW'].empty:
+                direction_win_rate = df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
+                direction_win_rate.columns = ['取引方向', '勝率']
+            else:
+                direction_win_rate = pd.DataFrame({'取引方向': [], '勝率': []})
+            # --- 修正箇所ここまで ---
             chart_direction = alt.Chart(direction_win_rate).mark_bar().encode(
                 x=alt.X('取引方向'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
@@ -135,10 +150,8 @@ if uploaded_file is not None:
 
             # --- Hourly Win Rate Heatmap ---
             st.subheader("時間帯別勝率ヒートマップ")
-            # --- 修正箇所 ---
             index = pd.MultiIndex.from_product([df['曜日'].unique(), df['時間帯'].cat.categories], names=['曜日', '時間帯'])
             heatmap_data = df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
-            # --- 修正箇所ここまで ---
             heatmap_data.columns = ['曜日', '時間帯', '勝率']
             chart_heatmap = alt.Chart(heatmap_data).mark_rect().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
@@ -154,8 +167,14 @@ if uploaded_file is not None:
 
             # --- Cumulative Profit/Loss Trend ---
             st.subheader("累積利益/損失推移")
-            df['累積利益'] = df['利益'].cumsum()
-            df['取引日付(str)'] = df['取引日付'].astype(str)
+            # --- 修正箇所: dfが空の場合のチェックを追加 ---
+            if not df.empty:
+                df['累積利益'] = df['利益'].cumsum()
+                df['取引日付(str)'] = df['取引日付'].astype(str)
+            else:
+                df['累積利益'] = []
+                df['取引日付(str)'] = []
+            # --- 修正箇所ここまで ---
             chart_cumulative = alt.Chart(df).mark_line().encode(
                 x=alt.X('取引日付(str)', title='日付'),
                 y=alt.Y('累積利益', title='累積利益/損失'),
@@ -169,10 +188,8 @@ if uploaded_file is not None:
 
             # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
             st.subheader("時間帯別取引頻度")
-            # --- 修正箇所 ---
             index = pd.MultiIndex.from_product([df['時間帯'].cat.categories, ['WIN', 'LOSE']], names=['時間帯', '結果'])
             trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reindex(index, fill_value=0).reset_index()
-            # --- 修正箇所ここまで ---
             trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
             chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
@@ -188,11 +205,12 @@ if uploaded_file is not None:
 
             # --- Win Rate:Currency Pair * Direction（ヒートマップ） ---
             st.subheader("通貨ペア×取引方向別勝率")
-            # --- 修正箇所 ---
-            index = pd.MultiIndex.from_product([df['取引銘柄'].unique(), df['HIGH/LOW'].unique()], names=['通貨ペア', '取引方向'])
-            pair_direction_win_rate = df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
-            # --- 修正箇所ここまで ---
-            pair_direction_win_rate.columns = ['通貨ペア', '取引方向', '勝率']
+            if not df['取引銘柄'].empty and not df['HIGH/LOW'].empty:
+                index = pd.MultiIndex.from_product([df['取引銘柄'].unique(), df['HIGH/LOW'].unique()], names=['通貨ペア', '取引方向'])
+                pair_direction_win_rate = df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
+                pair_direction_win_rate.columns = ['通貨ペア', '取引方向', '勝率']
+            else:
+                pair_direction_win_rate = pd.DataFrame({'通貨ペア': [], '取引方向': [], '勝率': []})
             chart_pair_direction = alt.Chart(pair_direction_win_rate).mark_rect().encode(
                 x=alt.X('取引方向'),
                 y=alt.Y('通貨ペア'),
@@ -207,7 +225,12 @@ if uploaded_file is not None:
 
             # --- 損益分布グラフ（色分け） ---
             st.subheader("損益分布グラフ")
-            df['利益区分'] = ['利益' if x > 0 else '損失' for x in df['利益']]
+            # --- 修正箇所: dfが空の場合のチェックを追加 ---
+            if not df.empty:
+                df['利益区分'] = ['利益' if x > 0 else '損失' for x in df['利益']]
+            else:
+                df['利益区分'] = []
+            # --- 修正箇所ここまで ---
             chart_pl_dist = alt.Chart(df).mark_bar().encode(
                 x=alt.X('利益', bin=alt.Bin(maxbins=50)),
                 y=alt.Y('count()', title='取引数'),
@@ -222,10 +245,16 @@ if uploaded_file is not None:
 
             # --- リスク・リワード比率と勝率の比較（色分け） ---
             st.subheader("リスク・リワード比率と勝率の比較")
-            average_profit = df[df['利益'] > 0]['利益'].mean()
-            average_loss = abs(df[df['利益'] < 0]['利益'].mean())
-            risk_reward_ratio = average_profit / average_loss if average_loss != 0 else 0
-            win_rate = df['結果(数値)'].mean()
+            if not df.empty:
+                average_profit = df[df['利益'] > 0]['利益'].mean()
+                average_loss = abs(df[df['利益'] < 0]['利益'].mean())
+                risk_reward_ratio = average_profit / average_loss if average_loss != 0 else 0
+                win_rate = df['結果(数値)'].mean()
+            else:
+                average_profit = 0
+                average_loss = 0
+                risk_reward_ratio = 0
+                win_rate = 0
             
             data = pd.DataFrame({
                 '指標': ['勝率', 'リスク・リワード比率'],
