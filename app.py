@@ -257,18 +257,17 @@ if uploaded_file is not None:
             if chart_images:
                 class PDF(FPDF):
                     def header(self):
-                        self.set_font('NotoSansJP', '', 15) # フォントをNotoSansJPに変更
+                        self.set_font('NotoSerifJP', '', 15)
                         self.cell(0, 10, '取引分析レポート', 0, 1, 'C')
                     def footer(self):
                         self.set_y(-15)
-                        self.set_font('NotoSansJP', '', 8) # フォントをNotoSansJPに変更
+                        self.set_font('NotoSerifJP', '', 8)
                         self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
                 
-                # FPDFに日本語フォントを追加
                 pdf = PDF()
-                pdf.add_font('NotoSansJP', '', 'NotoSansJP-Regular.otf', uni=True)
+                pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
                 pdf.add_page()
-                pdf.set_font('NotoSansJP', '', 12) # フォントをNotoSansJPに変更
+                pdf.set_font('NotoSerifJP', '', 12)
                 
                 for image_path in chart_images:
                     pdf.image(image_path, x=10, w=190)
