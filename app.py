@@ -48,8 +48,8 @@ if uploaded_file is not None:
         # 時系列順に並べ替え
         df.sort_values(by='取引日付', inplace=True)
 
-        # グラフ作成に不要な列を削除
-        df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション'])
+        # グラフ作成に不要な列と、エラーの原因となる'取引時刻'列を削除
+        df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻'])
         
         st.success("データの加工が完了しました！")
 
