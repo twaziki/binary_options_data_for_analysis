@@ -23,7 +23,7 @@ if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
 
         # 必要な列がすべて存在するかチェック
-        required_columns = ['日付', '購入金額', 'ペイアウト', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '取引銘柄', 'HIGH/LOW', '取引番号']
+        required_columns = ['日付', '購入金額', 'ペイアウト', '終了時刻', '判定レート', 'レート', '取引オプション', '取引銘柄', 'HIGH/LOW', '取引番号']
         if not all(col in df.columns for col in required_columns):
             missing_cols = [col for col in required_columns if col not in df.columns]
             st.error(f"エラー：CSVファイルに必要な列が見つかりません。見つからなかった列: {', '.join(missing_cols)}")
@@ -48,8 +48,8 @@ if uploaded_file is not None:
         # 時系列順に並べ替え
         df.sort_values(by='取引日付', inplace=True)
 
-        # グラフ作成に不要な列と、エラーの原因となる'取引時刻'列を削除
-        df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻'])
+        # グラフ作成に不要な列を削除
+        df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション'])
         
         st.success("データの加工が完了しました！")
 
@@ -274,15 +274,13 @@ if uploaded_file is not None:
                         self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
                 
                 pdf = PDF()
-                # フォント名を修正
                 pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
                 pdf.add_page()
                 pdf.set_font('NotoSerifJP', '', 12)
                 
                 for image_path in chart_images:
-                    # グラフの幅をw=130に修正
                     pdf.image(image_path, w=130)
-                    pdf.ln(10) # グラフ間の余白を追加
+                    pdf.ln(10)
 
                 pdf_output = pdf.output(dest='S').encode('latin1')
                 st.download_button(
