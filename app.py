@@ -5,6 +5,8 @@ import openpyxl
 import altair as alt
 from fpdf import FPDF
 import os
+from openpyxl.drawing.image import Image as ExcelImage
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(
     page_title="データ加工サービス",
@@ -72,7 +74,7 @@ if uploaded_file is not None:
         # グラフ表示の選択
         show_chart = st.checkbox("グラフを表示する")
 
-        # PDF生成用の画像ファイルリスト
+        # PDFとExcel生成用の画像ファイルリスト
         chart_images = []
 
         if show_chart:
@@ -299,15 +301,42 @@ if uploaded_file is not None:
                 )
             elif download_format == "Excel":
                 excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='加工データ')
-                    result_counts.to_excel(writer, index=False, sheet_name='全体勝率データ')
-                st.download_button(
-                    label="Excel形式でダウンロード",
-                    data=excel_buffer.getvalue(),
-                    file_name=f"{download_filename}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                
+                try:
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        # シート1: 加工データ
+                        df.to_excel(writer, index=False, sheet_name='加工データ')
+                        
+                        # シート2: グラフレポート
+                        wb = writer.book
+                        ws_charts = wb.create_sheet(title='グラフレポート')
+                        
+                        row_offset = 1
+                        for img_path in chart_images:
+                            if os.path.exists(img_path):
+                                img = ExcelImage(img_path)
+                                ws_charts.add_image(img, f'A{row_offset}')
+                                # 画像の高さに合わせて次の行を計算 (画像が約300px高であると仮定)
+                                # OpenPyXLのデフォルトは1px = 0.75ポイントなので、約400行になる
+                                row_offset += 25 # この値を調整して、グラフ間のスペースを調整できます
+                        
+                        # 画像の挿入後、一時ファイルを削除
+                        for img_path in chart_images:
+                            if os.path.exists(img_path):
+                                os.remove(img_path)
+                        
+                    st.download_button(
+                        label="Excel形式でダウンロード",
+                        data=excel_buffer.getvalue(),
+                        file_name=f"{download_filename}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                except Exception as e:
+                    st.error(f"Excelファイルの作成中にエラーが発生しました: {e}")
+                    st.warning("グラフ画像ファイルに問題があるか、Excelのダウンロード処理が失敗しました。")
+
+
             elif download_format == "PDF":
                 if chart_images:
                     class PDF(FPDF):
@@ -324,24 +353,25 @@ if uploaded_file is not None:
                     pdf.add_page()
                     pdf.set_font('NotoSerifJP', '', 12)
 
-                    # --- 修正箇所: 画像ファイルの存在チェックを追加 ---
                     for image_path in chart_images:
                         if os.path.exists(image_path):
                             pdf.image(image_path, w=130)
                             pdf.ln(10)
                         else:
                             st.error(f"エラー: 画像ファイル '{image_path}' が見つかりませんでした。PDF作成をスキップします。")
-                            break # エラーが発生した時点でループを終了
-                    # --- 修正箇所ここまで ---
+                            break
                     
-                    pdf_output = pdf.output(dest='S').encode('latin1')
-                    st.download_button(
-                        label="PDFでダウンロード",
-                        data=pdf_output,
-                        file_name="analysis_report.pdf",
-                        mime="application/pdf"
-                    )
-
+                    try:
+                        pdf_output = pdf.output(dest='S').encode('latin1')
+                        st.download_button(
+                            label="PDFでダウンロード",
+                            data=pdf_output,
+                            file_name="analysis_report.pdf",
+                            mime="application/pdf"
+                        )
+                    except Exception as e:
+                        st.error(f"PDFのダウンロード中にエラーが発生しました: {e}")
+                    
                     for img in chart_images:
                         if os.path.exists(img):
                             os.remove(img)
