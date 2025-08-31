@@ -39,7 +39,10 @@ if uploaded_file is not None:
         # 時系列順に並べ替え
         df.sort_values(by='取引日付', inplace=True)
 
-        df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション'])
+        # --- ここを修正 ---
+        # グラフ作成に不要な列と、エラーの原因となる'取引時刻'列を削除
+        df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻'])
+        # --- ここまで修正 ---
 
         st.success("データの加工が完了しました！")
 
@@ -156,9 +159,7 @@ if uploaded_file is not None:
 
             # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
             st.subheader("時間帯別取引頻度")
-            # '取引時刻'を文字列に変換してJSON化エラーを防ぐ
-            df['取引時刻(str)'] = df['取引時刻'].astype(str)
-            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引時刻(str)'].count().reset_index()
+            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reset_index()
             trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
             chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
