@@ -98,6 +98,21 @@ st.markdown("""
             color: #2c3e50;
             font-weight: bold;
         }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 24px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            white-space: nowrap;
+            background-color: #ecf0f1;
+            border-radius: 8px 8px 0px 0px;
+            gap: 10px;
+            padding: 10px 24px;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #3498db;
+            color: white;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -128,7 +143,6 @@ if uploaded_file is not None:
         # データ加工の処理
         try:
             df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'))
-            df['取引時刻'] = df['取引日付'].dt.time
             df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['利益'] = df['ペイアウト'] - df['購入金額']
@@ -185,32 +199,79 @@ if uploaded_file is not None:
                 if current_losses > max_losses:
                     max_losses = current_losses
 
+        # 最大ドローダウンの計算
+        df['累積利益'] = df['利益'].cumsum()
+        df['ピーク'] = df['累積利益'].cummax()
+        df['ドローダウン'] = df['ピーク'] - df['累積利益']
+        max_drawdown = df['ドローダウン'].max()
+
         # --- 統計データ表示セクション ---
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
         st.markdown('<h2 class="section-header">📊 要約統計データ</h2>', unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("総取引数", f"{total_trades} 回")
-        with col2:
-            st.metric("総損益", f"¥{total_profit:,}")
-        with col3:
-            st.metric("勝率", f"{win_rate:.2%}")
+        tab1, tab2, tab3 = st.tabs(["全体サマリー", "取引別分析", "時間別分析"])
 
-        col4, col5, col6 = st.columns(3)
-        with col4:
-            st.metric("リスク・リワード比率", f"{risk_reward_ratio:.2f}")
-        with col5:
-            st.metric("平均利益", f"¥{avg_profit:,.0f}" if not pd.isna(avg_profit) else "N/A")
-        with col6:
-            st.metric("平均損失", f"¥{avg_loss:,.0f}" if not pd.isna(avg_loss) else "N/A")
+        with tab1:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("総取引数", f"{total_trades} 回")
+            with col2:
+                st.metric("総損益", f"¥{total_profit:,}")
+            with col3:
+                st.metric("勝率", f"{win_rate:.2%}")
 
-        col7, col8 = st.columns(2)
-        with col7:
-            st.metric("最大連勝数", f"{max_wins} 回")
-        with col8:
-            st.metric("最大連敗数", f"{max_losses} 回")
-        
+            col4, col5, col6 = st.columns(3)
+            with col4:
+                st.metric("リスク・リワード比率", f"{risk_reward_ratio:.2f}")
+            with col5:
+                st.metric("平均利益", f"¥{avg_profit:,.0f}" if not pd.isna(avg_profit) else "N/A")
+            with col6:
+                st.metric("平均損失", f"¥{avg_loss:,.0f}" if not pd.isna(avg_loss) else "N/A")
+
+            col7, col8 = st.columns(2)
+            with col7:
+                st.metric("最大連勝数", f"{max_wins} 回")
+            with col8:
+                st.metric("最大連敗数", f"{max_losses} 回")
+            
+            st.metric("最大ドローダウン", f"¥{max_drawdown:,.0f}")
+            
+            st.info("💡 「利益/損失の平均取引時間」は、提供されたデータに取引開始時間と終了時間の情報が正確に存在しないため、現在計算できません。")
+
+        with tab2:
+            st.subheader("通貨ペア別パフォーマンス")
+            
+            col_pair_profit, col_pair_winrate = st.columns(2)
+            with col_pair_profit:
+                st.write("**通貨ペア別 総損益**")
+                pair_profit = df.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False)
+                st.dataframe(pair_profit.reset_index().rename(columns={'取引銘柄': '通貨ペア', '利益': '総損益'}), use_container_width=True)
+            with col_pair_winrate:
+                st.write("**通貨ペア別 勝率**")
+                pair_win_rate_df = df.groupby('取引銘柄')['結果(数値)'].mean().sort_values(ascending=False)
+                st.dataframe(pair_win_rate_df.reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'}).style.format({'勝率': '{:.2%}'}), use_container_width=True)
+
+        with tab3:
+            st.subheader("時間帯別・曜日別パフォーマンス")
+            
+            col_time, col_weekday = st.columns(2)
+            with col_time:
+                st.write("**時間帯別 総損益と勝率**")
+                time_analysis = df.groupby('時間帯').agg(
+                    総損益=('利益', 'sum'),
+                    勝率=('結果(数値)', 'mean')
+                ).reset_index()
+                st.dataframe(time_analysis.style.format({'総損益': '¥{:,}', '勝率': '{:.2%}'}), use_container_width=True)
+
+            with col_weekday:
+                st.write("**曜日別 総損益と勝率**")
+                weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                weekday_analysis = df.groupby('曜日').agg(
+                    総損益=('利益', 'sum'),
+                    勝率=('結果(数値)', 'mean')
+                ).reindex(weekday_order)
+                st.dataframe(weekday_analysis.style.format({'総損益': '¥{:,}', '勝率': '{:.2%}'}), use_container_width=True)
+
         st.markdown('</div>', unsafe_allow_html=True)
         
         # ダウンロード前にファイル名を入力
