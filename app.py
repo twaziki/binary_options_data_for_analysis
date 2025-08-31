@@ -34,10 +34,8 @@ if uploaded_file is not None:
                              labels=['深夜', '午前', '午後', '夜'],
                              right=False)
         
-        # --- ここから修正 ---
         # 時系列順に並べ替え
         df.sort_values(by='取引日付', inplace=True)
-        # --- ここまで修正 ---
 
         df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション'])
 
@@ -127,10 +125,7 @@ if uploaded_file is not None:
 
             # --- Cumulative Profit/Loss Trend ---
             st.subheader("累積利益/損失推移")
-            # --- ここから修正 ---
-            # 利益を累積計算
             df['累積利益'] = df['利益'].cumsum()
-            # --- ここまで修正 ---
             chart_cumulative = alt.Chart(df).mark_line().encode(
                 x=alt.X('取引日付', title='日付'),
                 y=alt.Y('累積利益', title='累積利益/損失'),
@@ -167,7 +162,44 @@ if uploaded_file is not None:
                 title='通貨ペア×取引方向別勝率'
             )
             st.altair_chart(chart_pair_direction, use_container_width=True)
+
+            # --- 損益分布グラフ ---
+            st.subheader("損益分布グラフ")
+            chart_pl_dist = alt.Chart(df).mark_bar().encode(
+                x=alt.X('利益', bin=alt.Bin(maxbins=50)), # ビン数を50に設定
+                y=alt.Y('count()', title='取引数'),
+                tooltip=[alt.Tooltip('利益', bin=True), alt.Tooltip('count()', title='取引数')]
+            ).properties(
+                title='損益分布'
+            )
+            st.altair_chart(chart_pl_dist, use_container_width=True)
             
+            # --- リスク・リワード比率と勝率の比較 ---
+            st.subheader("リスク・リワード比率と勝率の比較")
+            # 平均利益と平均損失を計算
+            average_profit = df[df['利益'] > 0]['利益'].mean()
+            average_loss = abs(df[df['利益'] < 0]['利益'].mean())
+            risk_reward_ratio = average_profit / average_loss if average_loss != 0 else 0
+            
+            # 勝率を計算
+            win_rate = df['結果(数値)'].mean()
+            
+            # データをDataFrameに変換
+            data = pd.DataFrame({
+                '指標': ['勝率', 'リスク・リワード比率'],
+                '値': [win_rate, risk_reward_ratio]
+            })
+            
+            # 棒グラフで表示
+            chart_rr_wr = alt.Chart(data).mark_bar().encode(
+                x=alt.X('指標'),
+                y=alt.Y('値', title=''),
+                tooltip=['指標', '値']
+            ).properties(
+                title='リスク・リワード比率と勝率の比較'
+            )
+            st.altair_chart(chart_rr_wr, use_container_width=True)
+
         st.subheader("ダウンロードオプション")
 
         # ダウンロード形式の選択
