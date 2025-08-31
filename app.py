@@ -5,8 +5,6 @@ import openpyxl
 import altair as alt
 from fpdf import FPDF
 import os
-from openpyxl.drawing.image import Image as ExcelImage
-from openpyxl.utils import get_column_letter
 
 st.set_page_config(
     page_title="データ加工サービス",
@@ -74,7 +72,7 @@ if uploaded_file is not None:
         # グラフ表示の選択
         show_chart = st.checkbox("グラフを表示する")
 
-        # PDFとExcel生成用の画像ファイルリスト
+        # PDF生成用の画像ファイルリスト
         chart_images = []
 
         if show_chart:
@@ -154,4 +152,205 @@ if uploaded_file is not None:
                 ).properties(
                     title='取引方向別勝率'
                 )
-                st.altair_chart(chart_
+                st.altair_chart(chart_direction, use_container_width=True)
+                chart_direction.save('direction_chart.png')
+                chart_images.append('direction_chart.png')
+
+                # --- Hourly Win Rate Heatmap ---
+                st.subheader("時間帯別勝率ヒートマップ")
+                index = pd.MultiIndex.from_product([df['曜日'].unique(), df['時間帯'].cat.categories], names=['曜日', '時間帯'])
+                heatmap_data = df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
+                heatmap_data.columns = ['曜日', '時間帯', '勝率']
+                chart_heatmap = alt.Chart(heatmap_data).mark_rect().encode(
+                    x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
+                    y=alt.Y('曜日', sort=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
+                    color=alt.Color('勝率', scale=alt.Scale(scheme='greenblue', domain=[0, 1]), legend=alt.Legend(format=".0%")),
+                    tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
+                ).properties(
+                    title='時間帯別勝率ヒートマップ'
+                )
+                st.altair_chart(chart_heatmap, use_container_width=True)
+                chart_heatmap.save('heatmap_chart.png')
+                chart_images.append('heatmap_chart.png')
+
+                # --- Cumulative Profit/Loss Trend ---
+                st.subheader("累積利益/損失推移")
+                if not df.empty:
+                    df['累積利益'] = df['利益'].cumsum()
+                    df['取引日付(str)'] = df['取引日付'].astype(str)
+                else:
+                    df['累積利益'] = []
+                    df['取引日付(str)'] = []
+                chart_cumulative = alt.Chart(df).mark_line().encode(
+                    x=alt.X('取引日付(str)', title='日付'),
+                    y=alt.Y('累積利益', title='累積利益/損失'),
+                    tooltip=['取引日付(str)', '累積利益']
+                ).properties(
+                    title='累積利益/損失推移'
+                )
+                st.altair_chart(chart_cumulative, use_container_width=True)
+                chart_cumulative.save('cumulative_chart.png')
+                chart_images.append('cumulative_chart.png')
+
+                # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
+                st.subheader("時間帯別取引頻度")
+                index = pd.MultiIndex.from_product([df['時間帯'].cat.categories, ['WIN', 'LOSE']], names=['時間帯', '結果'])
+                trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reindex(index, fill_value=0).reset_index()
+                trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
+                chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
+                    x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
+                    y=alt.Y('取引数', title='取引数'),
+                    color=alt.Color('結果', scale=alt.Scale(domain=['WIN', 'LOSE'], range=['#4CAF50', '#F44336'])),
+                    tooltip=['時間帯', '結果', '取引数']
+                ).properties(
+                    title='時間帯別取引頻度'
+                )
+                st.altair_chart(chart_frequency, use_container_width=True)
+                chart_frequency.save('frequency_chart.png')
+                chart_images.append('frequency_chart.png')
+
+                # --- Win Rate:Currency Pair * Direction（ヒートマップ） ---
+                st.subheader("通貨ペア×取引方向別勝率")
+                if not df['取引銘柄'].empty and not df['HIGH/LOW'].empty:
+                    index = pd.MultiIndex.from_product([df['取引銘柄'].unique(), df['HIGH/LOW'].unique()], names=['通貨ペア', '取引方向'])
+                    pair_direction_win_rate = df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
+                    pair_direction_win_rate.columns = ['通貨ペア', '取引方向', '勝率']
+                else:
+                    pair_direction_win_rate = pd.DataFrame({'通貨ペア': [], '取引方向': [], '勝率': []})
+                chart_pair_direction = alt.Chart(pair_direction_win_rate).mark_rect().encode(
+                    x=alt.X('取引方向'),
+                    y=alt.Y('通貨ペア'),
+                    color=alt.Color('勝率', scale=alt.Scale(scheme='greenblue', domain=[0, 1]), legend=alt.Legend(format=".0%")),
+                    tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
+                ).properties(
+                    title='通貨ペア×取引方向別勝率'
+                )
+                st.altair_chart(chart_pair_direction, use_container_width=True)
+                chart_pair_direction.save('pair_direction_chart.png')
+                chart_images.append('pair_direction_chart.png')
+
+                # --- 損益分布グラフ（色分け） ---
+                st.subheader("損益分布グラフ")
+                if not df.empty:
+                    df['利益区分'] = ['利益' if x > 0 else '損失' for x in df['利益']]
+                else:
+                    df['利益区分'] = []
+                chart_pl_dist = alt.Chart(df).mark_bar().encode(
+                    x=alt.X('利益', bin=alt.Bin(maxbins=50)),
+                    y=alt.Y('count()', title='取引数'),
+                    color=alt.Color('利益区分', scale=alt.Scale(domain=['利益', '損失'], range=['#4CAF50', '#F44336'])),
+                    tooltip=[alt.Tooltip('利益', bin=True), alt.Tooltip('count()', title='取引数')]
+                ).properties(
+                    title='損益分布'
+                )
+                st.altair_chart(chart_pl_dist, use_container_width=True)
+                chart_pl_dist.save('pl_dist_chart.png')
+                chart_images.append('pl_dist_chart.png')
+
+                # --- リスク・リワード比率と勝率の比較（色分け） ---
+                st.subheader("リスク・リワード比率と勝率の比較")
+                if not df.empty:
+                    average_profit = df[df['利益'] > 0]['利益'].mean()
+                    average_loss = abs(df[df['利益'] < 0]['利益'].mean())
+                    risk_reward_ratio = average_profit / average_loss if average_loss != 0 else 0
+                    win_rate = df['結果(数値)'].mean()
+                else:
+                    average_profit = 0
+                    average_loss = 0
+                    risk_reward_ratio = 0
+                    win_rate = 0
+                
+                data = pd.DataFrame({
+                    '指標': ['勝率', 'リスク・リワード比率'],
+                    '値': [win_rate, risk_reward_ratio]
+                })
+                
+                chart_rr_wr = alt.Chart(data).mark_bar().encode(
+                    x=alt.X('指標'),
+                    y=alt.Y('値', title=''),
+                    color='指標',
+                    tooltip=['指標', '値']
+                ).properties(
+                    title='リスク・リワード比率と勝率の比較'
+                )
+                st.altair_chart(chart_rr_wr, use_container_width=True)
+                chart_rr_wr.save('rr_wr_chart.png')
+                chart_images.append('rr_wr_chart.png')
+
+            except Exception as e:
+                st.error(f"グラフ作成中にエラーが発生しました: {e}")
+                st.warning("アップロードされたCSVファイルに、グラフの生成に必要なデータが不足している可能性があります。")
+
+
+            st.subheader("ダウンロードオプション")
+
+            # ダウンロード形式の選択
+            download_format = st.selectbox("ダウンロード形式を選択してください", ["CSV", "Excel", "PDF"])
+
+            # ダウンロードボタン
+            if download_format == "CSV":
+                csv_buffer = io.StringIO()
+                df.to_csv(csv_buffer, index=False)
+                st.download_button(
+                    label="CSV形式でダウンロード",
+                    data=csv_buffer.getvalue(),
+                    file_name=f"{download_filename}.csv",
+                    mime="text/csv"
+                )
+            elif download_format == "Excel":
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='加工データ')
+                    result_counts.to_excel(writer, index=False, sheet_name='全体勝率データ')
+                st.download_button(
+                    label="Excel形式でダウンロード",
+                    data=excel_buffer.getvalue(),
+                    file_name=f"{download_filename}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            elif download_format == "PDF":
+                if chart_images:
+                    class PDF(FPDF):
+                        def header(self):
+                            self.set_font('NotoSerifJP', '', 15)
+                            self.cell(0, 10, '取引分析レポート', 0, 1, 'C')
+                        def footer(self):
+                            self.set_y(-15)
+                            self.set_font('NotoSerifJP', '', 8)
+                            self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
+                    
+                    pdf = PDF()
+                    pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
+                    pdf.add_page()
+                    pdf.set_font('NotoSerifJP', '', 12)
+
+                    # --- 修正箇所: 画像ファイルの存在チェックを追加 ---
+                    for image_path in chart_images:
+                        if os.path.exists(image_path):
+                            pdf.image(image_path, w=130)
+                            pdf.ln(10)
+                        else:
+                            st.error(f"エラー: 画像ファイル '{image_path}' が見つかりませんでした。PDF作成をスキップします。")
+                            break # エラーが発生した時点でループを終了
+                    # --- 修正箇所ここまで ---
+                    
+                    pdf_output = pdf.output(dest='S').encode('latin1')
+                    st.download_button(
+                        label="PDFでダウンロード",
+                        data=pdf_output,
+                        file_name="analysis_report.pdf",
+                        mime="application/pdf"
+                    )
+
+                    for img in chart_images:
+                        if os.path.exists(img):
+                            os.remove(img)
+                else:
+                    st.warning("PDFを生成するには、まず「グラフを表示する」をチェックしてください。")
+            
+            st.info("データの加工とグラフ作成が完了しました。")
+            st.dataframe(df)
+
+    except Exception as e:
+        st.error(f"予期せぬエラーが発生しました: {e}")
+        st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
