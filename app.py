@@ -79,6 +79,10 @@ if uploaded_file is not None:
             st.subheader("日時勝率推移")
             daily_win_rate = df.groupby(df['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
             daily_win_rate.columns = ['日付', '勝率']
+            # --- ここから修正 ---
+            # 日付を文字列に変換してJSON化エラーを防ぐ
+            daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
+            # --- ここまで修正 ---
             chart_line = alt.Chart(daily_win_rate).mark_line().encode(
                 x=alt.X('日付'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
@@ -97,7 +101,7 @@ if uploaded_file is not None:
             chart_pair = alt.Chart(pair_win_rate).mark_bar().encode(
                 x=alt.X('通貨ペア'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
-                color='通貨ペア',
+                color='通貨ペア', # 通貨ペアごとに色分け
                 tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='通貨ペア別勝率'
@@ -113,7 +117,7 @@ if uploaded_file is not None:
             chart_direction = alt.Chart(direction_win_rate).mark_bar().encode(
                 x=alt.X('取引方向'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
-                color='取引方向',
+                color='取引方向', # 取引方向ごとに色分け
                 tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='取引方向別勝率'
@@ -141,10 +145,14 @@ if uploaded_file is not None:
             # --- Cumulative Profit/Loss Trend ---
             st.subheader("累積利益/損失推移")
             df['累積利益'] = df['利益'].cumsum()
+            # --- ここから修正 ---
+            # 日付を文字列に変換してJSON化エラーを防ぐ
+            df['取引日付(str)'] = df['取引日付'].astype(str)
+            # --- ここまで修正 ---
             chart_cumulative = alt.Chart(df).mark_line().encode(
-                x=alt.X('取引日付', title='日付'),
+                x=alt.X('取引日付(str)', title='日付'),
                 y=alt.Y('累積利益', title='累積利益/損失'),
-                tooltip=['取引日付', '累積利益']
+                tooltip=['取引日付(str)', '累積利益']
             ).properties(
                 title='累積利益/損失推移'
             )
@@ -255,37 +263,4 @@ if uploaded_file is not None:
                 class PDF(FPDF):
                     def header(self):
                         self.set_font('Arial', 'B', 15)
-                        self.cell(0, 10, '取引分析レポート', 0, 1, 'C')
-                    def footer(self):
-                        self.set_y(-15)
-                        self.set_font('Arial', 'I', 8)
-                        self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
-
-                pdf = PDF()
-                pdf.add_page()
-                pdf.set_font('Arial', 'B', 12)
-                
-                for image_path in chart_images:
-                    pdf.image(image_path, x=10, w=190)
-                    pdf.ln(5)
-
-                pdf_output = pdf.output(dest='S').encode('latin1')
-                st.download_button(
-                    label="PDFでダウンロード",
-                    data=pdf_output,
-                    file_name="analysis_report.pdf",
-                    mime="application/pdf"
-                )
-
-                for img in chart_images:
-                    os.remove(img)
-            else:
-                st.warning("PDFを生成するには、まず「グラフを表示する」をチェックしてください。")
-            
-
-        st.info("データの加工とグラフ作成が完了しました。")
-        st.dataframe(df)
-
-    except Exception as e:
-        st.error(f"エラーが発生しました: {e}")
-        st.write("ファイルの形式が正しくない可能性があります。CSVファイルが正しい形式であることを確認してください。")
+                        self.cell
