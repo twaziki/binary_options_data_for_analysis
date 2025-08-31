@@ -39,11 +39,9 @@ if uploaded_file is not None:
         # 時系列順に並べ替え
         df.sort_values(by='取引日付', inplace=True)
 
-        # --- ここを修正 ---
         # グラフ作成に不要な列と、エラーの原因となる'取引時刻'列を削除
         df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻'])
-        # --- ここまで修正 ---
-
+        
         st.success("データの加工が完了しました！")
 
         # ダウンロード前にファイル名を入力
@@ -101,7 +99,7 @@ if uploaded_file is not None:
             chart_pair = alt.Chart(pair_win_rate).mark_bar().encode(
                 x=alt.X('通貨ペア'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
-                color='通貨ペア', # 通貨ペアごとに色分け
+                color='通貨ペア',
                 tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='通貨ペア別勝率'
@@ -117,7 +115,7 @@ if uploaded_file is not None:
             chart_direction = alt.Chart(direction_win_rate).mark_bar().encode(
                 x=alt.X('取引方向'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
-                color='取引方向', # 取引方向ごとに色分け
+                color='取引方向',
                 tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='取引方向別勝率'
@@ -259,16 +257,18 @@ if uploaded_file is not None:
             if chart_images:
                 class PDF(FPDF):
                     def header(self):
-                        self.set_font('Arial', 'B', 15)
+                        self.set_font('NotoSansJP', '', 15) # フォントをNotoSansJPに変更
                         self.cell(0, 10, '取引分析レポート', 0, 1, 'C')
                     def footer(self):
                         self.set_y(-15)
-                        self.set_font('Arial', 'I', 8)
+                        self.set_font('NotoSansJP', '', 8) # フォントをNotoSansJPに変更
                         self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
-
+                
+                # FPDFに日本語フォントを追加
                 pdf = PDF()
+                pdf.add_font('NotoSansJP', '', 'NotoSansJP-Regular.otf', uni=True)
                 pdf.add_page()
-                pdf.set_font('Arial', 'B', 12)
+                pdf.set_font('NotoSansJP', '', 12) # フォントをNotoSansJPに変更
                 
                 for image_path in chart_images:
                     pdf.image(image_path, x=10, w=190)
