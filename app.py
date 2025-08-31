@@ -265,7 +265,7 @@ if uploaded_file is not None:
                         self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
                 
                 pdf = PDF()
-                pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
+                pdf.add_font('NotoSerifJP', '', 'NotoSerifJP[wght].ttf', uni=True)
                 pdf.add_page()
                 pdf.set_font('NotoSerifJP', '', 12)
                 
