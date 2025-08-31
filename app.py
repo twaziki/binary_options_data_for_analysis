@@ -67,7 +67,7 @@ if uploaded_file is not None:
             
             # --- 全体勝率（円グラフにWIN/LOSEの文字を追加） ---
             st.subheader("全体勝率")
-            result_counts = df['結果'].value_counts().reset_index()
+            result_counts = df['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
             result_counts.columns = ['結果', '取引数']
             chart_pie = alt.Chart(result_counts).mark_arc(outerRadius=120).encode(
                 theta=alt.Theta("取引数", stack=True),
@@ -135,7 +135,10 @@ if uploaded_file is not None:
 
             # --- Hourly Win Rate Heatmap ---
             st.subheader("時間帯別勝率ヒートマップ")
-            heatmap_data = df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reset_index()
+            # --- 修正箇所 ---
+            index = pd.MultiIndex.from_product([df['曜日'].unique(), df['時間帯'].cat.categories], names=['曜日', '時間帯'])
+            heatmap_data = df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
+            # --- 修正箇所ここまで ---
             heatmap_data.columns = ['曜日', '時間帯', '勝率']
             chart_heatmap = alt.Chart(heatmap_data).mark_rect().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
@@ -166,7 +169,10 @@ if uploaded_file is not None:
 
             # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
             st.subheader("時間帯別取引頻度")
-            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reset_index()
+            # --- 修正箇所 ---
+            index = pd.MultiIndex.from_product([df['時間帯'].cat.categories, ['WIN', 'LOSE']], names=['時間帯', '結果'])
+            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reindex(index, fill_value=0).reset_index()
+            # --- 修正箇所ここまで ---
             trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
             chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
@@ -182,7 +188,10 @@ if uploaded_file is not None:
 
             # --- Win Rate:Currency Pair * Direction（ヒートマップ） ---
             st.subheader("通貨ペア×取引方向別勝率")
-            pair_direction_win_rate = df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index()
+            # --- 修正箇所 ---
+            index = pd.MultiIndex.from_product([df['取引銘柄'].unique(), df['HIGH/LOW'].unique()], names=['通貨ペア', '取引方向'])
+            pair_direction_win_rate = df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
+            # --- 修正箇所ここまで ---
             pair_direction_win_rate.columns = ['通貨ペア', '取引方向', '勝率']
             chart_pair_direction = alt.Chart(pair_direction_win_rate).mark_rect().encode(
                 x=alt.X('取引方向'),
