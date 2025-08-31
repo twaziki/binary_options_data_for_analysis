@@ -3,8 +3,6 @@ import pandas as pd
 import io
 import openpyxl
 import altair as alt
-from fpdf import FPDF
-import os
 
 st.set_page_config(
     page_title="AI分析向けデータ加工サービス",
@@ -144,7 +142,7 @@ if uploaded_file is not None:
             df.sort_values(by='取引日付', inplace=True)
             
             # グラフ作成に不要な列と、エラーの原因となる'取引時刻'列を削除
-            df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻'])
+            df_cleaned = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻'])
             
             st.success("✅ データの加工が完了しました！")
             
@@ -159,15 +157,15 @@ if uploaded_file is not None:
             st.stop()
 
         # --- 統計データ計算 ---
-        total_trades = len(df)
-        total_profit = df['利益'].sum()
-        win_rate = df['結果(数値)'].mean()
-        avg_profit = df[df['利益'] > 0]['利益'].mean()
-        avg_loss = abs(df[df['利益'] < 0]['利益'].mean())
+        total_trades = len(df_cleaned)
+        total_profit = df_cleaned['利益'].sum()
+        win_rate = df_cleaned['結果(数値)'].mean()
+        avg_profit = df_cleaned[df_cleaned['利益'] > 0]['利益'].mean()
+        avg_loss = abs(df_cleaned[df_cleaned['利益'] < 0]['利益'].mean())
         risk_reward_ratio = avg_profit / avg_loss if avg_loss != 0 else 0
 
         # 最大連勝数と最大連敗数を計算
-        win_lose_list = df['結果'].tolist()
+        win_lose_list = df_cleaned['結果'].tolist()
         max_wins = 0
         max_losses = 0
         current_wins = 0
@@ -184,6 +182,12 @@ if uploaded_file is not None:
                 current_wins = 0
                 if current_losses > max_losses:
                     max_losses = current_losses
+
+        # 最大ドローダウンの計算
+        df_cleaned['累積利益'] = df_cleaned['利益'].cumsum()
+        df_cleaned['ピーク'] = df_cleaned['累積利益'].cummax()
+        df_cleaned['ドローダウン'] = df_cleaned['ピーク'] - df_cleaned['累積利益']
+        max_drawdown = df_cleaned['ドローダウン'].max()
 
         # --- 統計データ表示セクション ---
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
@@ -205,12 +209,31 @@ if uploaded_file is not None:
         with col6:
             st.metric("平均損失", f"¥{avg_loss:,.0f}" if not pd.isna(avg_loss) else "N/A")
 
-        col7, col8 = st.columns(2)
+        col7, col8, col9 = st.columns(3)
         with col7:
             st.metric("最大連勝数", f"{max_wins} 回")
         with col8:
             st.metric("最大連敗数", f"{max_losses} 回")
+        with col9:
+            st.metric("最大ドローダウン", f"¥{max_drawdown:,.0f}")
         
+        with st.expander("詳細統計データを表示"):
+            st.subheader("通貨ペア別総損益")
+            pair_profit = df_cleaned.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False)
+            st.dataframe(pair_profit.reset_index().rename(columns={'取引銘柄': '通貨ペア', '利益': '総損益'}), use_container_width=True)
+
+            st.subheader("時間帯別・曜日別勝率")
+            col_time, col_weekday = st.columns(2)
+            with col_time:
+                st.write("**時間帯別勝率**")
+                time_win_rate = df_cleaned.groupby('時間帯')['結果(数値)'].mean().reindex(['深夜', '午前', '午後', '夜'])
+                st.dataframe(time_win_rate.reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'}).style.format({'勝率': '{:.2%}'}), use_container_width=True)
+            with col_weekday:
+                st.write("**曜日別勝率**")
+                weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                weekday_win_rate = df_cleaned.groupby('曜日')['結果(数値)'].mean().reindex(weekday_order)
+                st.dataframe(weekday_win_rate.reset_index().rename(columns={'曜日': '曜日', '結果(数値)': '勝率'}).style.format({'勝率': '{:.2%}'}), use_container_width=True)
+
         st.markdown('</div>', unsafe_allow_html=True)
         
         # ダウンロード前にファイル名を入力
@@ -218,9 +241,6 @@ if uploaded_file is not None:
 
         # グラフ表示の選択
         show_chart = st.checkbox("📈 グラフを表示する")
-
-        # PDF生成用の画像ファイルリスト
-        chart_images = []
 
         if show_chart:
             st.markdown('<div class="section-container">', unsafe_allow_html=True)
@@ -232,7 +252,7 @@ if uploaded_file is not None:
                 try:
                     # --- 全体勝率（円グラフにWIN/LOSEの文字を追加） ---
                     st.subheader("全体勝率")
-                    result_counts = df['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
+                    result_counts = df_cleaned['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
                     result_counts.columns = ['結果', '取引数']
                     chart_pie = alt.Chart(result_counts).mark_arc(outerRadius=120).encode(
                         theta=alt.Theta("取引数", stack=True),
@@ -242,13 +262,11 @@ if uploaded_file is not None:
                     text = alt.Chart(result_counts).mark_text(radius=140).encode(text=alt.Text("結果"), theta=alt.Theta("取引数", stack=True))
                     combined_chart_pie = chart_pie + text
                     st.altair_chart(combined_chart_pie, use_container_width=True)
-                    combined_chart_pie.save('pie_chart.png')
-                    chart_images.append('pie_chart.png')
 
                     # --- 通貨ペア別勝率（色分け） ---
                     st.subheader("通貨ペア別勝率")
-                    if not df['取引銘柄'].empty:
-                        pair_win_rate = df.groupby('取引銘柄')['結果(数値)'].mean().reindex(df['取引銘柄'].unique(), fill_value=0).reset_index()
+                    if not df_cleaned['取引銘柄'].empty:
+                        pair_win_rate = df_cleaned.groupby('取引銘柄')['結果(数値)'].mean().reindex(df_cleaned['取引銘柄'].unique(), fill_value=0).reset_index()
                         pair_win_rate.columns = ['通貨ペア', '勝率']
                     else:
                         pair_win_rate = pd.DataFrame({'通貨ペア': [], '勝率': []})
@@ -257,8 +275,6 @@ if uploaded_file is not None:
                         color='通貨ペア', tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
                     ).properties(title='通貨ペア別勝率')
                     st.altair_chart(chart_pair, use_container_width=True)
-                    chart_pair.save('pair_chart.png')
-                    chart_images.append('pair_chart.png')
                 
                 except Exception as e:
                     st.warning(f"グラフ作成中にエラーが発生しました（左側）: {e}")
@@ -267,8 +283,8 @@ if uploaded_file is not None:
                 try:
                     # --- 日時勝率推移 ---
                     st.subheader("日時勝率推移")
-                    if not df.empty:
-                        daily_win_rate = df.groupby(df['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
+                    if not df_cleaned.empty:
+                        daily_win_rate = df_cleaned.groupby(df_cleaned['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
                         daily_win_rate.columns = ['日付', '勝率']
                         daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
                     else:
@@ -278,24 +294,20 @@ if uploaded_file is not None:
                         tooltip=['日付', alt.Tooltip('勝率', format=".1%")]
                     ).properties(title='日時勝率推移')
                     st.altair_chart(chart_line, use_container_width=True)
-                    chart_line.save('line_chart.png')
-                    chart_images.append('line_chart.png')
                     
                     # --- 累積利益/損失推移 ---
                     st.subheader("累積利益/損失推移")
-                    if not df.empty:
-                        df['累積利益'] = df['利益'].cumsum()
-                        df['取引日付(str)'] = df['取引日付'].astype(str)
+                    if not df_cleaned.empty:
+                        df_cleaned['累積利益'] = df_cleaned['利益'].cumsum()
+                        df_cleaned['取引日付(str)'] = df_cleaned['取引日付'].astype(str)
                     else:
-                        df['累積利益'] = []
-                        df['取引日付(str)'] = []
-                    chart_cumulative = alt.Chart(df).mark_line().encode(
+                        df_cleaned['累積利益'] = []
+                        df_cleaned['取引日付(str)'] = []
+                    chart_cumulative = alt.Chart(df_cleaned).mark_line().encode(
                         x=alt.X('取引日付(str)', title='日付'), y=alt.Y('累積利益', title='累積利益/損失'),
                         tooltip=['取引日付(str)', '累積利益']
                     ).properties(title='累積利益/損失推移')
                     st.altair_chart(chart_cumulative, use_container_width=True)
-                    chart_cumulative.save('cumulative_chart.png')
-                    chart_images.append('cumulative_chart.png')
                 
                 except Exception as e:
                     st.warning(f"グラフ作成中にエラーが発生しました（右側）: {e}")
@@ -306,8 +318,8 @@ if uploaded_file is not None:
                 try:
                     # --- 取引方向別勝率（色分け） ---
                     st.subheader("取引方向別勝率")
-                    if not df['HIGH/LOW'].empty:
-                        direction_win_rate = df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
+                    if not df_cleaned['HIGH/LOW'].empty:
+                        direction_win_rate = df_cleaned.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
                         direction_win_rate.columns = ['取引方向', '勝率']
                     else:
                         direction_win_rate = pd.DataFrame({'取引方向': [], '勝率': []})
@@ -316,53 +328,54 @@ if uploaded_file is not None:
                         color='取引方向', tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
                     ).properties(title='取引方向別勝率')
                     st.altair_chart(chart_direction, use_container_width=True)
-                    chart_direction.save('direction_chart.png')
-                    chart_images.append('direction_chart.png')
 
-                    # --- 時間帯別勝率ヒートマップ ---
-                    st.subheader("時間帯別勝率ヒートマップ")
-                    index = pd.MultiIndex.from_product([df['曜日'].unique(), df['時間帯'].cat.categories], names=['曜日', '時間帯'])
-                    heatmap_data = df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
-                    heatmap_data.columns = ['曜日', '時間帯', '勝率']
-                    chart_heatmap = alt.Chart(heatmap_data).mark_rect().encode(
-                        x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']), y=alt.Y('曜日', sort=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
+                    # --- 通貨ペア別・取引方向別勝率ヒートマップ ---
+                    st.subheader("通貨ペア・取引方向別勝率ヒートマップ")
+                    if not df_cleaned.empty:
+                        heatmap_data = df_cleaned.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index()
+                        heatmap_data.columns = ['取引銘柄', '取引方向', '勝率']
+                    else:
+                        heatmap_data = pd.DataFrame({'取引銘柄': [], '取引方向': [], '勝率': []})
+                    
+                    chart_heatmap_pair_direction = alt.Chart(heatmap_data).mark_rect().encode(
+                        x=alt.X('取引方向', title='取引方向', sort=['HIGH', 'LOW']),
+                        y=alt.Y('取引銘柄', title='通貨ペア'),
                         color=alt.Color('勝率', scale=alt.Scale(scheme='greenblue', domain=[0, 1]), legend=alt.Legend(format=".0%")),
-                        tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
-                    ).properties(title='時間帯別勝率ヒートマップ')
-                    st.altair_chart(chart_heatmap, use_container_width=True)
-                    chart_heatmap.save('heatmap_chart.png')
-                    chart_images.append('heatmap_chart.png')
+                        tooltip=['取引銘柄', '取引方向', alt.Tooltip('勝率', format=".1%")]
+                    ).properties(title='通貨ペア・取引方向別勝率ヒートマップ')
+                    
+                    st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
+
                 except Exception as e:
                     st.warning(f"グラフ作成中にエラーが発生しました（左側）: {e}")
 
             with col4:
                 try:
+                    # --- 時間帯別勝率ヒートマップ ---
+                    st.subheader("時間帯別勝率ヒートマップ")
+                    index = pd.MultiIndex.from_product([df_cleaned['曜日'].unique(), df_cleaned['時間帯'].cat.categories], names=['曜日', '時間帯'])
+                    heatmap_data = df_cleaned.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
+                    heatmap_data.columns = ['曜日', '時間帯', '勝率']
+                    chart_heatmap = alt.Chart(heatmap_data).mark_rect().encode(
+                        x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']), y=alt.Y('曜日', sort=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
+                        color=alt.Color('勝率', scale=alt.Scale(scheme='greenblue', domain=[0, 1]), legend=alt.Legend(format=".0%")),
+                        tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
+                    ).properties(title='曜日・時間帯別勝率ヒートマップ')
+                    st.altair_chart(chart_heatmap, use_container_width=True)
+
                     # --- 損益分布グラフ（色分け） ---
                     st.subheader("損益分布グラフ")
-                    if not df.empty:
-                        df['利益区分'] = ['利益' if x > 0 else '損失' for x in df['利益']]
+                    if not df_cleaned.empty:
+                        df_cleaned['利益区分'] = ['利益' if x > 0 else '損失' for x in df_cleaned['利益']]
                     else:
-                        df['利益区分'] = []
-                    chart_pl_dist = alt.Chart(df).mark_bar().encode(
+                        df_cleaned['利益区分'] = []
+                    chart_pl_dist = alt.Chart(df_cleaned).mark_bar().encode(
                         x=alt.X('利益', bin=alt.Bin(maxbins=50)), y=alt.Y('count()', title='取引数'),
                         color=alt.Color('利益区分', scale=alt.Scale(domain=['利益', '損失'], range=['#4CAF50', '#F44336'])),
                         tooltip=[alt.Tooltip('利益', bin=True), alt.Tooltip('count()', title='取引数')]
                     ).properties(title='損益分布')
                     st.altair_chart(chart_pl_dist, use_container_width=True)
-                    chart_pl_dist.save('pl_dist_chart.png')
-                    chart_images.append('pl_dist_chart.png')
-                    
-                    # --- リスク・リワード比率と勝率の比較 ---
-                    st.subheader("リスク・リワード比率と勝率の比較")
-                    data = pd.DataFrame({'指標': ['勝率', 'リスク・リワード比率'], '値': [win_rate, risk_reward_ratio]})
-                    chart_rr_wr = alt.Chart(data).mark_bar().encode(
-                        x=alt.X('指標'), y=alt.Y('値', title=''),
-                        color='指標', tooltip=['指標', '値']
-                    ).properties(title='リスク・リワード比率と勝率の比較')
-                    st.altair_chart(chart_rr_wr, use_container_width=True)
-                    chart_rr_wr.save('rr_wr_chart.png')
-                    chart_images.append('rr_wr_chart.png')
-                    
+                
                 except Exception as e:
                     st.warning(f"グラフ作成中にエラーが発生しました（右側）: {e}")
             
@@ -373,12 +386,12 @@ if uploaded_file is not None:
         st.markdown('<h2 class="section-header">⬇️ 加工済みデータのダウンロード</h2>', unsafe_allow_html=True)
         
         # ダウンロード形式の選択
-        download_format = st.selectbox("ダウンロード形式を選択してください", ["CSV", "Excel", "PDF"])
+        download_format = st.selectbox("ダウンロード形式を選択してください", ["CSV", "Excel"])
 
         # ダウンロードボタン
         if download_format == "CSV":
             csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False)
+            df_cleaned.to_csv(csv_buffer, index=False)
             st.download_button(
                 label="CSV形式でダウンロード",
                 data=csv_buffer.getvalue(),
@@ -388,57 +401,17 @@ if uploaded_file is not None:
         elif download_format == "Excel":
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='加工データ')
+                df_cleaned.to_excel(writer, index=False, sheet_name='加工データ')
             st.download_button(
                 label="Excel形式でダウンロード",
                 data=excel_buffer.getvalue(),
                 file_name=f"{download_filename}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-        elif download_format == "PDF":
-            if show_chart:
-                try:
-                    class PDF(FPDF):
-                        def header(self):
-                            self.set_font('NotoSerifJP', '', 15)
-                            self.cell(0, 10, '取引分析レポート', 0, 1, 'C')
-                        def footer(self):
-                            self.set_y(-15)
-                            self.set_font('NotoSerifJP', '', 8)
-                            self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
-                    
-                    pdf = PDF()
-                    pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
-                    pdf.add_page()
-                    pdf.set_font('NotoSerifJP', '', 12)
-
-                    for image_path in chart_images:
-                        if os.path.exists(image_path):
-                            pdf.image(image_path, w=130)
-                            pdf.ln(10)
-                        else:
-                            st.error(f"⚠️ エラー: 画像ファイル '{image_path}' が見つかりませんでした。PDF作成をスキップします。")
-                            break
-                    
-                    pdf_output = pdf.output(dest='S').encode('latin1')
-                    st.download_button(
-                        label="PDFでダウンロード",
-                        data=pdf_output,
-                        file_name="analysis_report.pdf",
-                        mime="application/pdf"
-                    )
-                except Exception as e:
-                    st.error(f"⚠️ PDFの作成中にエラーが発生しました: {e}")
-                
-                for img in chart_images:
-                    if os.path.exists(img):
-                        os.remove(img)
-            else:
-                st.warning("⚠️ PDFを生成するには、まず「グラフを表示する」をチェックしてください。")
         
         st.markdown('</div>', unsafe_allow_html=True)
         st.info("データの加工とグラフ作成が完了しました。")
-        st.dataframe(df)
+        st.dataframe(df_cleaned)
 
     except Exception as e:
         st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
