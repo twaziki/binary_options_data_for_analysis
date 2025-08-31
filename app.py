@@ -263,4 +263,37 @@ if uploaded_file is not None:
                 class PDF(FPDF):
                     def header(self):
                         self.set_font('Arial', 'B', 15)
-                        self.cell
+                        self.cell(0, 10, '取引分析レポート', 0, 1, 'C')
+                    def footer(self):
+                        self.set_y(-15)
+                        self.set_font('Arial', 'I', 8)
+                        self.cell(0, 10, f'ページ {self.page_no()}', 0, 0, 'C')
+
+                pdf = PDF()
+                pdf.add_page()
+                pdf.set_font('Arial', 'B', 12)
+                
+                for image_path in chart_images:
+                    pdf.image(image_path, x=10, w=190)
+                    pdf.ln(5)
+
+                pdf_output = pdf.output(dest='S').encode('latin1')
+                st.download_button(
+                    label="PDFでダウンロード",
+                    data=pdf_output,
+                    file_name="analysis_report.pdf",
+                    mime="application/pdf"
+                )
+
+                for img in chart_images:
+                    os.remove(img)
+            else:
+                st.warning("PDFを生成するには、まず「グラフを表示する」をチェックしてください。")
+            
+
+        st.info("データの加工とグラフ作成が完了しました。")
+        st.dataframe(df)
+
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
+        st.write("ファイルの形式が正しくない可能性があります。CSVファイルが正しい形式であることを確認してください。")
