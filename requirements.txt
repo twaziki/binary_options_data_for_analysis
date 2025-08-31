@@ -5,3 +5,4 @@ xlsxwriter
 altair
 fpdf
 altair_saver
+vl-convert-python
