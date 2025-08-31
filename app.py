@@ -22,6 +22,15 @@ if uploaded_file is not None:
         # ファイルを読み込み
         df = pd.read_csv(uploaded_file)
 
+        # 必要な列がすべて存在するかチェック
+        required_columns = ['日付', '購入金額', 'ペイアウト', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '取引銘柄', 'HIGH/LOW', '取引番号']
+        if not all(col in df.columns for col in required_columns):
+            missing_cols = [col for col in required_columns if col not in df.columns]
+            st.error(f"エラー：CSVファイルに必要な列が見つかりません。見つからなかった列: {', '.join(missing_cols)}")
+            st.info("アップロードされたCSVファイルの列名:")
+            st.code(list(df.columns))
+            st.stop()
+            
         # データ加工の処理
         df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'))
         df['取引時刻'] = df['取引日付'].dt.time
