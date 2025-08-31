@@ -272,4 +272,25 @@ if uploaded_file is not None:
                 for image_path in chart_images:
                     # w=150に修正して画像を小さくします
                     pdf.image(image_path, w=150)
-                    pdf.ln(10) # グラフ
+                    pdf.ln(10) # グラフ間の余白を追加します
+
+                pdf_output = pdf.output(dest='S').encode('latin1')
+                st.download_button(
+                    label="PDFでダウンロード",
+                    data=pdf_output,
+                    file_name="analysis_report.pdf",
+                    mime="application/pdf"
+                )
+
+                for img in chart_images:
+                    os.remove(img)
+            else:
+                st.warning("PDFを生成するには、まず「グラフを表示する」をチェックしてください。")
+            
+
+        st.info("データの加工とグラフ作成が完了しました。")
+        st.dataframe(df)
+
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
+        st.write("ファイルの形式が正しくない可能性があります。CSVファイルが正しい形式であることを確認してください。")
