@@ -33,6 +33,12 @@ if uploaded_file is not None:
                              bins=[0, 6, 12, 18, 24],
                              labels=['深夜', '午前', '午後', '夜'],
                              right=False)
+        
+        # --- ここから修正 ---
+        # 時系列順に並べ替え
+        df.sort_values(by='取引日付', inplace=True)
+        # --- ここまで修正 ---
+
         df = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション'])
 
         st.success("データの加工が完了しました！")
@@ -121,7 +127,10 @@ if uploaded_file is not None:
 
             # --- Cumulative Profit/Loss Trend ---
             st.subheader("累積利益/損失推移")
+            # --- ここから修正 ---
+            # 利益を累積計算
             df['累積利益'] = df['利益'].cumsum()
+            # --- ここまで修正 ---
             chart_cumulative = alt.Chart(df).mark_line().encode(
                 x=alt.X('取引日付', title='日付'),
                 y=alt.Y('累積利益', title='累積利益/損失'),
