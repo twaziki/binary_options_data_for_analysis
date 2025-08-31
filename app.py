@@ -79,10 +79,7 @@ if uploaded_file is not None:
             st.subheader("日時勝率推移")
             daily_win_rate = df.groupby(df['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
             daily_win_rate.columns = ['日付', '勝率']
-            # --- ここから修正 ---
-            # 日付を文字列に変換してJSON化エラーを防ぐ
             daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
-            # --- ここまで修正 ---
             chart_line = alt.Chart(daily_win_rate).mark_line().encode(
                 x=alt.X('日付'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
@@ -145,10 +142,7 @@ if uploaded_file is not None:
             # --- Cumulative Profit/Loss Trend ---
             st.subheader("累積利益/損失推移")
             df['累積利益'] = df['利益'].cumsum()
-            # --- ここから修正 ---
-            # 日付を文字列に変換してJSON化エラーを防ぐ
             df['取引日付(str)'] = df['取引日付'].astype(str)
-            # --- ここまで修正 ---
             chart_cumulative = alt.Chart(df).mark_line().encode(
                 x=alt.X('取引日付(str)', title='日付'),
                 y=alt.Y('累積利益', title='累積利益/損失'),
@@ -162,8 +156,12 @@ if uploaded_file is not None:
 
             # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
             st.subheader("時間帯別取引頻度")
-            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reset_index()
+            # --- ここから修正 ---
+            # '取引時刻'を文字列に変換してJSON化エラーを防ぐ
+            df['取引時刻(str)'] = df['取引時刻'].astype(str)
+            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引時刻(str)'].count().reset_index()
             trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
+            # --- ここまで修正 ---
             chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
                 x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
                 y=alt.Y('取引数', title='取引数'),
