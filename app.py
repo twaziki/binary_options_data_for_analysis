@@ -46,7 +46,7 @@ if uploaded_file is not None:
         if show_chart:
             st.header("取引結果の分析グラフ")
             
-            # --- 全体勝率 ---
+            # --- 全体勝率（円グラフにWIN/LOSEの文字を追加） ---
             st.subheader("全体勝率")
             result_counts = df['結果'].value_counts().reset_index()
             result_counts.columns = ['結果', '取引数']
@@ -57,7 +57,12 @@ if uploaded_file is not None:
             ).properties(
                 title='全体勝率'
             )
-            st.altair_chart(chart_pie, use_container_width=True)
+            # テキストを円の中心に追加
+            text = alt.Chart(result_counts).mark_text(radius=140).encode(
+                text=alt.Text("結果"),
+                theta=alt.Theta("取引数", stack=True)
+            )
+            st.altair_chart(chart_pie + text, use_container_width=True)
 
             # --- 日時勝率推移 ---
             st.subheader("日時勝率推移")
@@ -72,26 +77,28 @@ if uploaded_file is not None:
             )
             st.altair_chart(chart_line, use_container_width=True)
 
-            # --- 通貨ペア別勝率 ---
+            # --- 通貨ペア別勝率（色分け） ---
             st.subheader("通貨ペア別勝率")
             pair_win_rate = df.groupby('取引銘柄')['結果(数値)'].mean().reset_index()
             pair_win_rate.columns = ['通貨ペア', '勝率']
             chart_pair = alt.Chart(pair_win_rate).mark_bar().encode(
                 x=alt.X('通貨ペア'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
+                color='通貨ペア', # 通貨ペアごとに色分け
                 tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='通貨ペア別勝率'
             )
             st.altair_chart(chart_pair, use_container_width=True)
 
-            # --- 取引方向別勝率 ---
+            # --- 取引方向別勝率（色分け） ---
             st.subheader("取引方向別勝率")
             direction_win_rate = df.groupby('HIGH/LOW')['結果(数値)'].mean().reset_index()
             direction_win_rate.columns = ['取引方向', '勝率']
             chart_direction = alt.Chart(direction_win_rate).mark_bar().encode(
                 x=alt.X('取引方向'),
                 y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
+                color='取引方向', # 取引方向ごとに色分け
                 tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='取引方向別勝率'
@@ -124,34 +131,34 @@ if uploaded_file is not None:
             )
             st.altair_chart(chart_cumulative, use_container_width=True)
 
-            # --- Trading Frequency by Hour ---
+            # --- Trading Frequency by Hour（棒を勝ち負けで色分け） ---
             st.subheader("時間帯別取引頻度")
-            trading_frequency = df.groupby(df['取引時刻'].apply(lambda x: x.hour))['取引番号'].count().reset_index()
-            trading_frequency.columns = ['時刻', '取引数']
-            chart_frequency = alt.Chart(trading_frequency).mark_bar().encode(
-                x=alt.X('時刻', title='時間帯'),
+            trading_frequency_by_result = df.groupby(['時間帯', '結果'])['取引番号'].count().reset_index()
+            trading_frequency_by_result.columns = ['時間帯', '結果', '取引数']
+            chart_frequency = alt.Chart(trading_frequency_by_result).mark_bar().encode(
+                x=alt.X('時間帯', sort=['深夜', '午前', '午後', '夜']),
                 y=alt.Y('取引数', title='取引数'),
-                tooltip=['時刻', '取引数']
+                color=alt.Color('結果', scale=alt.Scale(domain=['WIN', 'LOSE'], range=['#4CAF50', '#F44336'])),
+                tooltip=['時間帯', '結果', '取引数']
             ).properties(
                 title='時間帯別取引頻度'
             )
             st.altair_chart(chart_frequency, use_container_width=True)
 
-            # --- Win Rate:Currency Pair * Direction ---
+            # --- Win Rate:Currency Pair * Direction（ヒートマップ） ---
             st.subheader("通貨ペア×取引方向別勝率")
             pair_direction_win_rate = df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index()
             pair_direction_win_rate.columns = ['通貨ペア', '取引方向', '勝率']
-            chart_pair_direction = alt.Chart(pair_direction_win_rate).mark_bar().encode(
-                x=alt.X('取引方向', axis=None),
-                y=alt.Y('勝率', axis=alt.Axis(format=".0%")),
-                color=alt.Color('取引方向'),
-                column='通貨ペア',
+            chart_pair_direction = alt.Chart(pair_direction_win_rate).mark_rect().encode(
+                x=alt.X('取引方向'),
+                y=alt.Y('通貨ペア'),
+                color=alt.Color('勝率', scale=alt.Scale(scheme='greenblue', domain=[0, 1]), legend=alt.Legend(format=".0%")),
                 tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
             ).properties(
                 title='通貨ペア×取引方向別勝率'
             )
             st.altair_chart(chart_pair_direction, use_container_width=True)
-
+            
         st.subheader("ダウンロードオプション")
 
         # ダウンロード形式の選択
