@@ -323,11 +323,17 @@ if uploaded_file is not None:
                     pdf.add_font('NotoSerifJP', '', 'NotoSerifJP-VariableFont_wght.ttf', uni=True)
                     pdf.add_page()
                     pdf.set_font('NotoSerifJP', '', 12)
-                    
-                    for image_path in chart_images:
-                        pdf.image(image_path, w=130)
-                        pdf.ln(10)
 
+                    # --- 修正箇所: 画像ファイルの存在チェックを追加 ---
+                    for image_path in chart_images:
+                        if os.path.exists(image_path):
+                            pdf.image(image_path, w=130)
+                            pdf.ln(10)
+                        else:
+                            st.error(f"エラー: 画像ファイル '{image_path}' が見つかりませんでした。PDF作成をスキップします。")
+                            break # エラーが発生した時点でループを終了
+                    # --- 修正箇所ここまで ---
+                    
                     pdf_output = pdf.output(dest='S').encode('latin1')
                     st.download_button(
                         label="PDFでダウンロード",
@@ -337,7 +343,8 @@ if uploaded_file is not None:
                     )
 
                     for img in chart_images:
-                        os.remove(img)
+                        if os.path.exists(img):
+                            os.remove(img)
                 else:
                     st.warning("PDFを生成するには、まず「グラフを表示する」をチェックしてください。")
             
