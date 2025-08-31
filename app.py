@@ -21,18 +21,18 @@ st.markdown("""
         }
         .main-header {
             font-size: 3em;
-            color: #2c3e50; /* 暗めの青 */
+            color: #2c3e50;
             text-align: center;
             margin-bottom: 0.5em;
         }
         .main-subheader {
             font-size: 1.2em;
-            color: #7f8c8d; /* グレー */
+            color: #7f8c8d;
             text-align: center;
             margin-bottom: 2em;
         }
         .stButton>button {
-            background-color: #3498db; /* 青 */
+            background-color: #3498db;
             color: white;
             border-radius: 5px;
             border: none;
@@ -42,10 +42,10 @@ st.markdown("""
             cursor: pointer;
         }
         .stButton>button:hover {
-            background-color: #2980b9; /* 濃い青 */
+            background-color: #2980b9;
         }
         .stDownloadButton > button {
-            background-color: #2ecc71; /* 緑 */
+            background-color: #2ecc71;
             color: white;
             border-radius: 5px;
             border: none;
@@ -55,10 +55,10 @@ st.markdown("""
             cursor: pointer;
         }
         .stDownloadButton > button:hover {
-            background-color: #27ae60; /* 濃い緑 */
+            background-color: #27ae60;
         }
         .stDownloadButton > button > div > p {
-            font-size: 1em; /* ダウンロードボタンのテキストを調整 */
+            font-size: 1em;
         }
         .section-container {
             background-color: #f8f9fa;
@@ -80,11 +80,23 @@ st.markdown("""
             padding: 10px;
             margin-bottom: 1em;
         }
-        .stTabs {
-            background-color: #ecf0f1;
-            border-radius: 10px;
-            padding: 0.5em 1em;
-            margin-bottom: 1em;
+        .metric-container {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 15px;
+            background-color: white;
+        }
+        .metric-title {
+            font-size: 1em;
+            color: #7f8c8d;
+            font-weight: bold;
+        }
+        .metric-value {
+            font-size: 1.8em;
+            color: #2c3e50;
+            font-weight: bold;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -146,6 +158,61 @@ if uploaded_file is not None:
             st.error(f"⚠️ データ加工中に予期せぬエラーが発生しました: {e}")
             st.stop()
 
+        # --- 統計データ計算 ---
+        total_trades = len(df)
+        total_profit = df['利益'].sum()
+        win_rate = df['結果(数値)'].mean()
+        avg_profit = df[df['利益'] > 0]['利益'].mean()
+        avg_loss = abs(df[df['利益'] < 0]['利益'].mean())
+        risk_reward_ratio = avg_profit / avg_loss if avg_loss != 0 else 0
+
+        # 最大連勝数と最大連敗数を計算
+        win_lose_list = df['結果'].tolist()
+        max_wins = 0
+        max_losses = 0
+        current_wins = 0
+        current_losses = 0
+
+        for result in win_lose_list:
+            if result == 'WIN':
+                current_wins += 1
+                current_losses = 0
+                if current_wins > max_wins:
+                    max_wins = current_wins
+            else:
+                current_losses += 1
+                current_wins = 0
+                if current_losses > max_losses:
+                    max_losses = current_losses
+
+        # --- 統計データ表示セクション ---
+        st.markdown('<div class="section-container">', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-header">📊 要約統計データ</h2>', unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("総取引数", f"{total_trades} 回")
+        with col2:
+            st.metric("総損益", f"¥{total_profit:,}")
+        with col3:
+            st.metric("勝率", f"{win_rate:.2%}")
+
+        col4, col5, col6 = st.columns(3)
+        with col4:
+            st.metric("リスク・リワード比率", f"{risk_reward_ratio:.2f}")
+        with col5:
+            st.metric("平均利益", f"¥{avg_profit:,.0f}" if not pd.isna(avg_profit) else "N/A")
+        with col6:
+            st.metric("平均損失", f"¥{avg_loss:,.0f}" if not pd.isna(avg_loss) else "N/A")
+
+        col7, col8 = st.columns(2)
+        with col7:
+            st.metric("最大連勝数", f"{max_wins} 回")
+        with col8:
+            st.metric("最大連敗数", f"{max_losses} 回")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
         # ダウンロード前にファイル名を入力
         download_filename = st.text_input("ダウンロードするファイル名を入力してください", "processed_trade_data")
 
@@ -163,6 +230,7 @@ if uploaded_file is not None:
             col1, col2 = st.columns(2)
             with col1:
                 try:
+                    # --- 全体勝率（円グラフにWIN/LOSEの文字を追加） ---
                     st.subheader("全体勝率")
                     result_counts = df['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
                     result_counts.columns = ['結果', '取引数']
@@ -177,6 +245,7 @@ if uploaded_file is not None:
                     combined_chart_pie.save('pie_chart.png')
                     chart_images.append('pie_chart.png')
 
+                    # --- 通貨ペア別勝率（色分け） ---
                     st.subheader("通貨ペア別勝率")
                     if not df['取引銘柄'].empty:
                         pair_win_rate = df.groupby('取引銘柄')['結果(数値)'].mean().reindex(df['取引銘柄'].unique(), fill_value=0).reset_index()
@@ -196,6 +265,7 @@ if uploaded_file is not None:
             
             with col2:
                 try:
+                    # --- 日時勝率推移 ---
                     st.subheader("日時勝率推移")
                     if not df.empty:
                         daily_win_rate = df.groupby(df['取引日付'].dt.date)['結果(数値)'].mean().reset_index()
@@ -211,6 +281,7 @@ if uploaded_file is not None:
                     chart_line.save('line_chart.png')
                     chart_images.append('line_chart.png')
                     
+                    # --- 累積利益/損失推移 ---
                     st.subheader("累積利益/損失推移")
                     if not df.empty:
                         df['累積利益'] = df['利益'].cumsum()
@@ -233,6 +304,7 @@ if uploaded_file is not None:
             col3, col4 = st.columns(2)
             with col3:
                 try:
+                    # --- 取引方向別勝率（色分け） ---
                     st.subheader("取引方向別勝率")
                     if not df['HIGH/LOW'].empty:
                         direction_win_rate = df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
@@ -247,6 +319,7 @@ if uploaded_file is not None:
                     chart_direction.save('direction_chart.png')
                     chart_images.append('direction_chart.png')
 
+                    # --- 時間帯別勝率ヒートマップ ---
                     st.subheader("時間帯別勝率ヒートマップ")
                     index = pd.MultiIndex.from_product([df['曜日'].unique(), df['時間帯'].cat.categories], names=['曜日', '時間帯'])
                     heatmap_data = df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index()
@@ -264,6 +337,7 @@ if uploaded_file is not None:
 
             with col4:
                 try:
+                    # --- 損益分布グラフ（色分け） ---
                     st.subheader("損益分布グラフ")
                     if not df.empty:
                         df['利益区分'] = ['利益' if x > 0 else '損失' for x in df['利益']]
@@ -278,18 +352,8 @@ if uploaded_file is not None:
                     chart_pl_dist.save('pl_dist_chart.png')
                     chart_images.append('pl_dist_chart.png')
                     
+                    # --- リスク・リワード比率と勝率の比較 ---
                     st.subheader("リスク・リワード比率と勝率の比較")
-                    if not df.empty:
-                        average_profit = df[df['利益'] > 0]['利益'].mean()
-                        average_loss = abs(df[df['利益'] < 0]['利益'].mean())
-                        risk_reward_ratio = average_profit / average_loss if average_loss != 0 else 0
-                        win_rate = df['結果(数値)'].mean()
-                    else:
-                        average_profit = 0
-                        average_loss = 0
-                        risk_reward_ratio = 0
-                        win_rate = 0
-                    
                     data = pd.DataFrame({'指標': ['勝率', 'リスク・リワード比率'], '値': [win_rate, risk_reward_ratio]})
                     chart_rr_wr = alt.Chart(data).mark_bar().encode(
                         x=alt.X('指標'), y=alt.Y('値', title=''),
@@ -325,8 +389,6 @@ if uploaded_file is not None:
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name='加工データ')
-                # エラーの原因となる可能性のある行をコメントアウト
-                # result_counts.to_excel(writer, index=False, sheet_name='全体勝率データ')
             st.download_button(
                 label="Excel形式でダウンロード",
                 data=excel_buffer.getvalue(),
@@ -334,7 +396,7 @@ if uploaded_file is not None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         elif download_format == "PDF":
-            if chart_images:
+            if show_chart:
                 try:
                     class PDF(FPDF):
                         def header(self):
