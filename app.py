@@ -1,76 +1,74 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from functools import lru_cache
+import numpy as np
+import plotly.express as px
 
-# ================================
-# 🔧 データ読み込み関数（キャッシュ付き）
-# ================================
-@lru_cache(maxsize=4)
-def load_data(file_path):
-    return pd.read_csv(file_path, parse_dates=['取引時間'])
+st.set_page_config(page_title="バイナリーオプション分析ツール", layout="wide")
 
-# ================================
-# 🔧 データ集計関数
-# ================================
-def aggregate_data(df):
-    summary = {
-        '総取引数': len(df),
-        '勝率': df['結果'].eq('勝ち').mean() * 100,
-        '通貨ペア別': df.groupby('通貨ペア')['結果'].value_counts(normalize=True).unstack(fill_value=0),
-        '時間帯別': df.groupby(df['取引時間'].dt.hour)['結果'].value_counts(normalize=True).unstack(fill_value=0)
-    }
-    return summary
+# ===== データ読み込み関数 =====
+def load_data(uploaded_file):
+    # uploaded_file は BytesIO オブジェクトなので、直接 pandas に渡せる
+    return pd.read_csv(uploaded_file, parse_dates=['取引時間'])
 
-# ================================
-# 🎨 可視化関数
-# ================================
-def plot_winrate_by_currency(currency_stats):
-    fig, ax = plt.subplots(figsize=(6, 3))
-    (currency_stats['勝ち'] * 100).plot(kind='bar', ax=ax)
-    ax.set_ylabel('勝率 (%)')
-    ax.set_title('通貨ペア別勝率')
-    ax.set_ylim(0, 100)
-    ax.grid(axis='y', linestyle='--', alpha=0.5)
-    st.pyplot(fig)
+# ===== データ分析関数 =====
+def analyze_data(df):
+    results = {}
+    # 勝率
+    results['勝率'] = (df['結果'].eq('勝ち').mean() * 100).round(2)
 
-def plot_winrate_by_hour(hourly_stats):
-    fig, ax = plt.subplots(figsize=(6, 3))
-    (hourly_stats['勝ち'] * 100).plot(marker='o', ax=ax)
-    ax.set_ylabel('勝率 (%)')
-    ax.set_xlabel('時間帯')
-    ax.set_title('時間帯別勝率')
-    ax.set_ylim(0, 100)
-    ax.grid(True, linestyle='--', alpha=0.5)
-    st.pyplot(fig)
+    # 通貨ペアごとの勝率
+    pair_win_rate = (
+        df.groupby('通貨ペア')['結果']
+        .apply(lambda x: (x == '勝ち').mean() * 100)
+        .sort_values(ascending=False)
+    )
+    results['通貨ペア別勝率'] = pair_win_rate
 
-# ================================
-# 🎨 Streamlit UI
-# ================================
+    # 時間帯別勝率
+    df['hour'] = df['取引時間'].dt.hour
+    hour_win_rate = (
+        df.groupby('hour')['結果']
+        .apply(lambda x: (x == '勝ち').mean() * 100)
+    )
+    results['時間帯別勝率'] = hour_win_rate
+
+    return results
+
+# ===== メイン処理 =====
 def main():
-    st.title('📊 バイナリーオプション取引分析ツール')
-    uploaded_file = st.file_uploader("CSVファイルをアップロードしてください", type="csv")
+    st.title("📊 バイナリーオプション取引データ分析ツール")
+    st.write("取引データ（CSV）をアップロードして分析します。")
 
-    if uploaded_file:
-        df = load_data(uploaded_file.name)
-        summary = aggregate_data(df)
+    uploaded_file = st.file_uploader("CSVファイルをアップロード", type=["csv"])
 
-        # 📄 概要表示
-        st.subheader('概要')
-        st.metric("総取引数", summary['総取引数'])
-        st.metric("勝率", f"{summary['勝率']:.2f}%")
+    if uploaded_file is not None:
+        try:
+            df = load_data(uploaded_file)
+            st.success("データを読み込みました！")
+            st.dataframe(df.head())
 
-        # 📊 通貨ペア別勝率
-        st.subheader('通貨ペア別分析')
-        plot_winrate_by_currency(summary['通貨ペア別'])
+            results = analyze_data(df)
 
-        # ⏰ 時間帯別勝率
-        st.subheader('時間帯別分析')
-        plot_winrate_by_hour(summary['時間帯別'])
+            st.subheader("✅ 勝率")
+            st.metric("全体勝率", f"{results['勝率']} %")
 
-        # 🔍 データテーブル表示
-        with st.expander("📄 生データを表示"):
-            st.dataframe(df)
+            st.subheader("📈 通貨ペア別勝率")
+            st.bar_chart(results['通貨ペア別勝率'])
+
+            st.subheader("🕒 時間帯別勝率")
+            fig = px.line(
+                x=results['時間帯別勝率'].index,
+                y=results['時間帯別勝率'].values,
+                labels={"x": "時間帯", "y": "勝率(%)"},
+                title="時間帯別勝率"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"データ読み込み中にエラーが発生しました: {e}")
+
+    else:
+        st.info("まずはCSVファイルをアップロードしてください。")
 
 if __name__ == "__main__":
     main()
