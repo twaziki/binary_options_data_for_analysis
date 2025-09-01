@@ -156,7 +156,6 @@ if uploaded_file is not None:
             st.stop()
         
         try:
-            # 日付と時刻の加工
             df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'))
             df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'))
             df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
@@ -167,11 +166,8 @@ if uploaded_file is not None:
             df['曜日'] = df['取引日付'].dt.day_name()
             df['時間帯'] = pd.cut(df['取引日付'].dt.hour, bins=[0, 6, 12, 18, 24], labels=['深夜', '午前', '午後', '夜'], right=False)
             
-            # --- ここから取引時間に関する新しい処理 ---
-            # '終了日時' - '取引日付'で取引時間を計算
             df['取引時間_秒'] = (df['終了日時'] - df['取引日付']).dt.total_seconds()
             
-            # 取引時間をカテゴリに分類する関数
             def categorize_duration(seconds):
                 if seconds == 15:
                     return '15秒'
@@ -186,13 +182,10 @@ if uploaded_file is not None:
                 else:
                     return 'その他'
             
-            # 新しい列 '取引時間' を作成
             df['取引時間'] = df['取引時間_秒'].apply(categorize_duration)
             
-            # 時系列順に並べ替え
             df.sort_values(by='取引日付', inplace=True)
             
-            # グラフ作成に不要な列を削除
             df_cleaned = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '終了日時'], errors='ignore')
             
             st.success("✅ データの加工が完了しました！")
@@ -272,6 +265,7 @@ if uploaded_file is not None:
             st.markdown('<div class="section-container">', unsafe_allow_html=True)
             st.markdown('<h2 class="section-header">📊 取引結果の分析グラフ</h2>', unsafe_allow_html=True)
             
+            # 2列に分けてグラフを配置
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("全体勝率")
@@ -284,6 +278,11 @@ if uploaded_file is not None:
                 pair_win_rate = df_cleaned.groupby('取引銘柄')['結果(数値)'].mean().reindex(df_cleaned['取引銘柄'].unique(), fill_value=0).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
                 chart_pair = create_chart(pair_win_rate, 'bar', '通貨ペア', '勝率', '通貨ペア別勝率', format_y=".0%", color='通貨ペア', tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_pair, use_container_width=True)
+                
+                st.subheader("取引方向別勝率")
+                direction_win_rate = df_cleaned.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
+                chart_direction = create_chart(direction_win_rate, 'bar', '取引方向', '勝率', '取引方向別勝率', format_y=".0%", color='取引方向', tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")])
+                st.altair_chart(chart_direction, use_container_width=True)
 
             with col2:
                 st.subheader("日時勝率推移")
@@ -296,37 +295,31 @@ if uploaded_file is not None:
                 df_cleaned['取引日付(str)'] = df_cleaned['取引日付'].astype(str)
                 chart_cumulative = create_chart(df_cleaned, 'line', '取引日付(str)', '累積利益', '累積利益/損失推移', x_title='日付', y_title='累積利益/損失', tooltip=['取引日付(str)', '累積利益'])
                 st.altair_chart(chart_cumulative, use_container_width=True)
+                
+                st.subheader("取引時間別勝率")
+                time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
+                time_win_rate = df_cleaned.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
+                chart_time_win_rate = create_chart(time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率', format_y=".0%", color='取引時間', tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")])
+                st.altair_chart(chart_time_win_rate, use_container_width=True)
 
+
+            # 2列に分けてヒートマップを配置
             col3, col4 = st.columns(2)
             with col3:
-                st.subheader("取引方向別勝率")
-                direction_win_rate = df_cleaned.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
-                chart_direction = create_chart(direction_win_rate, 'bar', '取引方向', '勝率', '取引方向別勝率', format_y=".0%", color='取引方向', tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")])
-                st.altair_chart(chart_direction, use_container_width=True)
-
                 st.subheader("通貨ペア・取引方向別勝率ヒートマップ")
                 heatmap_data = df_cleaned.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
                 chart_heatmap_pair_direction = create_chart(heatmap_data, 'heatmap', '取引方向', '通貨ペア', '通貨ペア・取引方向別勝率ヒートマップ', sort_x=['HIGH', 'LOW'], color='勝率', tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
             
             with col4:
-                st.subheader("取引時間別勝率")
-                # カテゴリの順序を指定
-                time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
-                time_win_rate = df_cleaned.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
-                chart_time_win_rate = create_chart(time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率', format_y=".0%", color='取引時間', tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")])
-                st.altair_chart(chart_time_win_rate, use_container_width=True)
+                st.subheader("時間帯別勝率ヒートマップ")
+                weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                time_order = ['深夜', '午前', '午後', '夜']
+                index = pd.MultiIndex.from_product([df_cleaned['曜日'].unique(), df_cleaned['時間帯'].cat.categories], names=['曜日', '時間帯'])
+                heatmap_data_time = df_cleaned.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
+                chart_heatmap_time = create_chart(heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ', sort_x=time_order, sort_y=weekday_order, color='勝率', tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")])
+                st.altair_chart(chart_heatmap_time, use_container_width=True)
 
-                st.subheader("損益分布グラフ")
-                df_cleaned['利益区分'] = ['利益' if x > 0 else '損失' for x in df_cleaned['利益']]
-                chart_pl_dist = alt.Chart(df_cleaned).mark_bar().encode(
-                    x=alt.X('利益', bin=alt.Bin(maxbins=50)),
-                    y=alt.Y('count()', title='取引数'),
-                    color=alt.Color('利益区分', scale=alt.Scale(domain=['利益', '損失'], range=['#4CAF50', '#F44336'])),
-                    tooltip=[alt.Tooltip('利益', bin=True), alt.Tooltip('count()', title='取引数')]
-                ).properties(title='損益分布')
-                st.altair_chart(chart_pl_dist, use_container_width=True)
-            
             st.markdown('</div>', unsafe_allow_html=True)
         
         # --- ダウンロードセクション ---
