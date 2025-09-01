@@ -323,18 +323,12 @@ def process_uploaded_file(uploaded_file):
 
                 st.subheader("累積利益/損失推移")
                 df_cleaned['取引日付(str)'] = df_cleaned['取引日付'].astype(str)
-                
-                # Y軸の範囲を自動調整からゼロ中心に調整
-                # 最大の絶対値を取得して、対称的な範囲を設定
-                max_abs_value = df_cleaned['累積利益'].abs().max()
-                
                 chart_cumulative = alt.Chart(df_cleaned).mark_line().encode(
                     x=alt.X('取引日付(str)', title='日付'),
                     y=alt.Y('累積利益', title='累積損益 (¥)',
-                            scale=alt.Scale(domain=[-max_abs_value * 1.1, max_abs_value * 1.1]), # Y軸の範囲を対称に設定
-                            axis=alt.Axis(format='s')), # 金額を見やすくするフォーマット
+                            axis=alt.Axis(format='s')),
                     tooltip=['取引日付(str)', '累積利益']
-                ).properties(title='累積損益推移') # タイトルも修正
+                ).properties(title='累積損益推移')
                 st.altair_chart(chart_cumulative, use_container_width=True)
                 
                 st.subheader("取引時間別勝率")
