@@ -169,7 +169,7 @@ def process_trade_data(df):
         st.code(list(df.columns))
         st.stop()
     
-    # 日付と時刻の処理（修正済み）
+    # 日付と時刻の処理
     df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
     df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
     
@@ -187,6 +187,11 @@ def process_trade_data(df):
     # 取引時間の計算
     df['取引時間_秒'] = (df['終了日時'] - df['取引日付']).dt.total_seconds()
     df['取引時間'] = df['取引時間_秒'].apply(categorize_duration).astype('category')
+    
+    # 累積利益とドローダウンの計算
+    df['累積利益'] = df['利益'].cumsum()
+    df['ピーク'] = df['累積利益'].cummax()
+    df['ドローダウン'] = df['ピーク'] - df['累積利益']
     
     # 不要な列の削除とソート
     df.sort_values(by='取引日付', inplace=True)
@@ -216,10 +221,7 @@ def generate_summary_stats(df):
             current_losses += 1
             current_wins = 0
             max_losses = max(max_losses, current_losses)
-
-    df['累積利益'] = df['利益'].cumsum()
-    df['ピーク'] = df['累積利益'].cummax()
-    df['ドローダウン'] = df['ピーク'] - df['累積利益']
+    
     max_drawdown = df['ドローダウン'].max()
     
     return {
@@ -246,7 +248,7 @@ def process_uploaded_file(uploaded_file):
         df_cleaned = process_trade_data(df)
         
         # --- 統計データ計算 ---
-        stats = generate_summary_stats(df_cleaned.copy()) # copy()でオリジナルを変更しないように
+        stats = generate_summary_stats(df_cleaned.copy())
         
         # --- 統計データ表示セクション ---
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
@@ -385,3 +387,4 @@ def process_uploaded_file(uploaded_file):
 
 if uploaded_file is not None:
     process_uploaded_file(uploaded_file)
+    
