@@ -173,9 +173,9 @@ def process_trade_data(df):
     df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
     df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
     
-    # 数値列の処理
-    df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
-    df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
+    # 数値列の処理をより堅牢に修正
+    df['購入金額'] = pd.to_numeric(df['購入金額'].str.replace('¥', '').str.replace(',', ''), errors='coerce').fillna(0).astype(int)
+    df['ペイアウト'] = pd.to_numeric(df['ペイアウト'].str.replace('¥', '').str.replace(',', ''), errors='coerce').fillna(0).astype(int)
     df['利益'] = df['ペイアウト'] - df['購入金額']
     
     # カテゴリ列の作成と最適化
@@ -247,6 +247,14 @@ def process_uploaded_file(uploaded_file):
 
         df_cleaned = process_trade_data(df)
         
+        # デバッグセクション: 利益計算の確認
+        st.markdown('<div class="section-container">', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-header">🔍 利益計算の確認</h2>', unsafe_allow_html=True)
+        with st.expander("加工後の利益データを確認する"):
+            st.write("各取引の加工後の`購入金額`、`ペイアウト`、`利益`の最初の5行です。")
+            st.dataframe(df_cleaned[['購入金額', 'ペイアウト', '利益']].head())
+        st.markdown('</div>', unsafe_allow_html=True)
+
         # --- 統計データ計算 ---
         stats = generate_summary_stats(df_cleaned.copy())
         
@@ -354,6 +362,26 @@ def process_uploaded_file(uploaded_file):
                 chart_heatmap_time = create_chart(heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ', sort_x=time_order, sort_y=weekday_order, color='勝率', tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_heatmap_time, use_container_width=True)
 
+            # --- 新しい棒グラフの追加 ---
+            st.subheader("取引ごとの利益/損失 (棒グラフ)")
+            df_cleaned['取引番号(str)'] = df_cleaned['取引番号'].astype(str)
+            
+            # 取引結果（WIN/LOSE）で色を分ける
+            bar_chart = alt.Chart(df_cleaned).mark_bar().encode(
+                x=alt.X('取引番号(str)', axis=None, title='取引番号 (X軸を非表示)'),
+                y=alt.Y('利益', title='利益/損失 (¥)', axis=alt.Axis(format='s')),
+                color=alt.Color('結果', scale=alt.Scale(domain=['WIN', 'LOSE'], range=['#4CAF50', '#F44336'])),
+                tooltip=[
+                    alt.Tooltip('取引番号', title='取引番号'),
+                    alt.Tooltip('取引日付', title='日付', format="%Y-%m-%d %H:%M:%S"),
+                    alt.Tooltip('利益', title='利益/損失', format=","),
+                    alt.Tooltip('結果', title='結果')
+                ]
+            ).properties(
+                title='各取引の利益と損失'
+            ).interactive()
+            st.altair_chart(bar_chart, use_container_width=True)
+
             st.markdown('</div>', unsafe_allow_html=True)
         
         # --- ダウンロードセクション ---
@@ -392,4 +420,3 @@ def process_uploaded_file(uploaded_file):
 
 if uploaded_file is not None:
     process_uploaded_file(uploaded_file)
-    
