@@ -6,3 +6,6 @@ altair
 fpdf
 altair_saver
 vl-convert-python
+numpy
+matplotlib
+plotly
