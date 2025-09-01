@@ -108,8 +108,9 @@ st.markdown('<h2 class="section-header">📂 ファイルアップロード</h2>
 uploaded_file = st.file_uploader("CSVファイルをアップロードしてください", type=["csv"])
 st.markdown('</div>', unsafe_allow_html=True)
 
-# グラフ作成の共通関数
+# --- 共通関数群 ---
 def create_chart(df, chart_type, x_col, y_col, title, **kwargs):
+    """Altairグラフを生成する共通関数"""
     if chart_type == "bar":
         chart = alt.Chart(df).mark_bar().encode(
             x=alt.X(x_col, title=kwargs.get('x_title')),
@@ -142,104 +143,129 @@ def create_chart(df, chart_type, x_col, y_col, title, **kwargs):
         ).properties(title=title)
     return chart
 
-if uploaded_file is not None:
+def categorize_duration(seconds):
+    """取引時間をカテゴリに分類する関数"""
+    if seconds == 15:
+        return '15秒'
+    elif seconds == 30:
+        return '30秒'
+    elif seconds == 60:
+        return '60秒'
+    elif 170 <= seconds <= 190:
+        return '3分'
+    elif 290 <= seconds <= 310:
+        return '5分'
+    else:
+        return 'その他'
+
+def process_trade_data(df):
+    """データ加工の主要ロジックをまとめた関数"""
+    # 必要な列の存在チェック
+    required_columns = ['日付', '購入金額', 'ペイアウト', '終了時刻', '判定レート', 'レート', '取引オプション', '取引銘柄', 'HIGH/LOW', '取引番号']
+    if not all(col in df.columns for col in required_columns):
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        st.error(f"⚠️ エラー：CSVファイルに必要な列が見つかりません。見つからなかった列: {', '.join(missing_cols)}")
+        st.info("アップロードされたCSVファイルの列名:")
+        st.code(list(df.columns))
+        st.stop()
+    
+    # 日付と時刻の処理（修正済み）
+    df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
+    df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
+    
+    # 数値列の処理
+    df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
+    df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
+    df['利益'] = df['ペイアウト'] - df['購入金額']
+    
+    # カテゴリ列の作成と最適化
+    df['結果'] = ['WIN' if x > 0 else 'LOSE' for x in df['利益']]
+    df['結果(数値)'] = df['結果'].apply(lambda x: 1 if x == 'WIN' else 0)
+    df['曜日'] = df['取引日付'].dt.day_name().astype('category')
+    df['時間帯'] = pd.cut(df['取引日付'].dt.hour, bins=[0, 6, 12, 18, 24], labels=['深夜', '午前', '午後', '夜'], right=False).astype('category')
+    
+    # 取引時間の計算
+    df['取引時間_秒'] = (df['終了日時'] - df['取引日付']).dt.total_seconds()
+    df['取引時間'] = df['取引時間_秒'].apply(categorize_duration).astype('category')
+    
+    # 不要な列の削除とソート
+    df.sort_values(by='取引日付', inplace=True)
+    df_cleaned = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '終了日時'], errors='ignore')
+    
+    st.success("✅ データの加工が完了しました！")
+    return df_cleaned
+
+def generate_summary_stats(df):
+    """要約統計量を計算する関数"""
+    total_trades = len(df)
+    total_profit = df['利益'].sum()
+    win_rate = df['結果(数値)'].mean()
+    avg_profit = df[df['利益'] > 0]['利益'].mean()
+    avg_loss = abs(df[df['利益'] < 0]['利益'].mean())
+    risk_reward_ratio = avg_profit / avg_loss if avg_loss != 0 and not pd.isna(avg_profit) and not pd.isna(avg_loss) else 0
+    
+    win_lose_list = df['結果'].tolist()
+    max_wins, max_losses = 0, 0
+    current_wins, current_losses = 0, 0
+    for result in win_lose_list:
+        if result == 'WIN':
+            current_wins += 1
+            current_losses = 0
+            max_wins = max(max_wins, current_wins)
+        else:
+            current_losses += 1
+            current_wins = 0
+            max_losses = max(max_losses, current_losses)
+
+    df['累積利益'] = df['利益'].cumsum()
+    df['ピーク'] = df['累積利益'].cummax()
+    df['ドローダウン'] = df['ピーク'] - df['累積利益']
+    max_drawdown = df['ドローダウン'].max()
+    
+    return {
+        'total_trades': total_trades,
+        'total_profit': total_profit,
+        'win_rate': win_rate,
+        'avg_profit': avg_profit,
+        'avg_loss': avg_loss,
+        'risk_reward_ratio': risk_reward_ratio,
+        'max_wins': max_wins,
+        'max_losses': max_losses,
+        'max_drawdown': max_drawdown
+    }
+
+# --- メインロジック ---
+def process_uploaded_file(uploaded_file):
+    """アップロードされたファイルを処理するメイン関数"""
     try:
         df = pd.read_csv(uploaded_file)
         st.success("🎉 CSVファイルの読み込みに成功しました！")
+        st.info("💡 データのプレビュー（加工前）")
+        st.dataframe(df.head())
 
-        required_columns = ['日付', '購入金額', 'ペイアウト', '終了時刻', '判定レート', 'レート', '取引オプション', '取引銘柄', 'HIGH/LOW', '取引番号']
-        if not all(col in df.columns for col in required_columns):
-            missing_cols = [col for col in required_columns if col not in df.columns]
-            st.error(f"⚠️ エラー：CSVファイルに必要な列が見つかりません。見つからなかった列: {', '.join(missing_cols)}")
-            st.info("アップロードされたCSVファイルの列名:")
-            st.code(list(df.columns))
-            st.stop()
+        df_cleaned = process_trade_data(df)
         
-        try:
-            # 日付と時刻の処理を修正
-            df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
-            df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
-            
-            df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
-            df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
-            df['利益'] = df['ペイアウト'] - df['購入金額']
-            df['結果'] = ['WIN' if x > 0 else 'LOSE' for x in df['利益']]
-            df['結果(数値)'] = df['結果'].apply(lambda x: 1 if x == 'WIN' else 0)
-            df['曜日'] = df['取引日付'].dt.day_name()
-            df['時間帯'] = pd.cut(df['取引日付'].dt.hour, bins=[0, 6, 12, 18, 24], labels=['深夜', '午前', '午後', '夜'], right=False)
-            
-            df['取引時間_秒'] = (df['終了日時'] - df['取引日付']).dt.total_seconds()
-            
-            def categorize_duration(seconds):
-                if seconds == 15:
-                    return '15秒'
-                elif seconds == 30:
-                    return '30秒'
-                elif seconds == 60:
-                    return '60秒'
-                elif 170 <= seconds <= 190:
-                    return '3分'
-                elif 290 <= seconds <= 310:
-                    return '5分'
-                else:
-                    return 'その他'
-            
-            df['取引時間'] = df['取引時間_秒'].apply(categorize_duration)
-            
-            df.sort_values(by='取引日付', inplace=True)
-            
-            df_cleaned = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '終了日時'], errors='ignore')
-            
-            st.success("✅ データの加工が完了しました！")
-            
-        except Exception as e:
-            st.error(f"⚠️ データ加工中に予期せぬエラーが発生しました: {e}")
-            st.stop()
-
         # --- 統計データ計算 ---
-        total_trades = len(df_cleaned)
-        total_profit = df_cleaned['利益'].sum()
-        win_rate = df_cleaned['結果(数値)'].mean()
-        avg_profit = df_cleaned[df_cleaned['利益'] > 0]['利益'].mean()
-        avg_loss = abs(df_cleaned[df_cleaned['利益'] < 0]['利益'].mean())
-        risk_reward_ratio = avg_profit / avg_loss if avg_loss != 0 and not pd.isna(avg_profit) and not pd.isna(avg_loss) else 0
+        stats = generate_summary_stats(df_cleaned.copy()) # copy()でオリジナルを変更しないように
         
-        win_lose_list = df_cleaned['結果'].tolist()
-        max_wins, max_losses = 0, 0
-        current_wins, current_losses = 0, 0
-        for result in win_lose_list:
-            if result == 'WIN':
-                current_wins += 1
-                current_losses = 0
-                max_wins = max(max_wins, current_wins)
-            else:
-                current_losses += 1
-                current_wins = 0
-                max_losses = max(max_losses, current_losses)
-
-        df_cleaned['累積利益'] = df_cleaned['利益'].cumsum()
-        df_cleaned['ピーク'] = df_cleaned['累積利益'].cummax()
-        df_cleaned['ドローダウン'] = df_cleaned['ピーク'] - df_cleaned['累積利益']
-        max_drawdown = df_cleaned['ドローダウン'].max()
-
         # --- 統計データ表示セクション ---
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
         st.markdown('<h2 class="section-header">📊 要約統計データ</h2>', unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns(3)
-        with col1: st.metric("総取引数", f"{total_trades} 回")
-        with col2: st.metric("総損益", f"¥{total_profit:,}")
-        with col3: st.metric("勝率", f"{win_rate:.2%}")
+        with col1: st.metric("総取引数", f"{stats['total_trades']} 回")
+        with col2: st.metric("総損益", f"¥{stats['total_profit']:,}")
+        with col3: st.metric("勝率", f"{stats['win_rate']:.2%}")
 
         col4, col5, col6 = st.columns(3)
-        with col4: st.metric("リスク・リワード比率", f"{risk_reward_ratio:.2f}")
-        with col5: st.metric("平均利益", f"¥{avg_profit:,.0f}" if not pd.isna(avg_profit) else "N/A")
-        with col6: st.metric("平均損失", f"¥{avg_loss:,.0f}" if not pd.isna(avg_loss) else "N/A")
+        with col4: st.metric("リスク・リワード比率", f"{stats['risk_reward_ratio']:.2f}")
+        with col5: st.metric("平均利益", f"¥{stats['avg_profit']:,.0f}" if not pd.isna(stats['avg_profit']) else "N/A")
+        with col6: st.metric("平均損失", f"¥{stats['avg_loss']:,.0f}" if not pd.isna(stats['avg_loss']) else "N/A")
 
         col7, col8, col9 = st.columns(3)
-        with col7: st.metric("最大連勝数", f"{max_wins} 回")
-        with col8: st.metric("最大連敗数", f"{max_losses} 回")
-        with col9: st.metric("最大ドローダウン", f"¥{max_drawdown:,.0f}")
+        with col7: st.metric("最大連勝数", f"{stats['max_wins']} 回")
+        with col8: st.metric("最大連敗数", f"{stats['max_losses']} 回")
+        with col9: st.metric("最大ドローダウン", f"¥{stats['max_drawdown']:,.0f}")
         
         with st.expander("詳細統計データを表示"):
             st.subheader("通貨ペア別総損益")
@@ -304,7 +330,6 @@ if uploaded_file is not None:
                 chart_time_win_rate = create_chart(time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率', format_y=".0%", color='取引時間', tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_time_win_rate, use_container_width=True)
 
-
             # 2列に分けてヒートマップを配置
             col3, col4 = st.columns(2)
             with col3:
@@ -357,3 +382,6 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
         st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
+
+if uploaded_file is not None:
+    process_uploaded_file(uploaded_file)
