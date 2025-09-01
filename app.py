@@ -161,13 +161,9 @@ if uploaded_file is not None:
             df['日付'] = df['日付'].str.strip('="').str.strip('"')
             df['終了時刻'] = df['終了時刻'].str.strip('="').str.strip('"')
 
-            # 日付と時刻の列を結合して日時列を生成
-            df['取引日時'] = df['日付'] + ' ' + df['取引時刻']
-            df['終了日時'] = df['日付'] + ' ' + df['終了時刻']
-
-            # 明示的なフォーマット指定で正確にパース
-            df['取引日付'] = pd.to_datetime(df['取引日時'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
-            df['終了日時'] = pd.to_datetime(df['終了日時'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+            # 日付列と終了時刻列をそのまま日時としてパース
+            df['取引日付'] = pd.to_datetime(df['日付'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+            df['終了日時'] = pd.to_datetime(df['終了時刻'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
 
             df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
@@ -203,7 +199,7 @@ if uploaded_file is not None:
             
         except Exception as e:
             st.error(f"⚠️ データ加工中に予期せぬエラーが発生しました: {e}")
-            st.write("CSVファイルの日付/時刻のフォーマットが `YYYY/MM/DD` と `HH:MM:SS` の形式で、それぞれ別の列に存在することを確認してください。")
+            st.write("CSVファイルの日付/時刻のフォーマットが `YYYY/MM/DD HH:MM:SS` 形式であることを確認してください。")
             st.stop()
 
         # --- 統計データ計算 ---
@@ -366,3 +362,4 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
         st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
+        
