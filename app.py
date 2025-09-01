@@ -156,9 +156,10 @@ if uploaded_file is not None:
             st.stop()
         
         try:
-            # 日付と時刻の加工（より堅牢な方法に修正）
-            df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'))
-            df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'))
+            # 日付と時刻の加工（日付フォーマットを明示的に指定して修正）
+            df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format='%Y/%m/%d %H:%M:%S', errors='coerce')
+            df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format='%Y/%m/%d %H:%M:%S', errors='coerce')
+            
             df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['利益'] = df['ペイアウト'] - df['購入金額']
@@ -193,7 +194,7 @@ if uploaded_file is not None:
             
         except Exception as e:
             st.error(f"⚠️ データ加工中に予期せぬエラーが発生しました: {e}")
-            st.write("CSVファイルの日付/時刻のフォーマットを確認してください。")
+            st.write("CSVファイルの日付/時刻のフォーマットを確認してください。`YYYY/MM/DD HH:MM:SS` 形式である必要があります。")
             st.stop()
 
         # --- 統計データ計算 ---
@@ -305,7 +306,6 @@ if uploaded_file is not None:
 
             st.markdown('<hr style="border:1px solid #e0e0e0;"/>', unsafe_allow_html=True)
             
-            # 2列に分けてヒートマップを配置
             col3, col4 = st.columns(2)
             with col3:
                 st.subheader("通貨ペア・取引方向別勝率ヒートマップ")
@@ -357,3 +357,4 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
         st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
+        
