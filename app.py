@@ -156,6 +156,7 @@ if uploaded_file is not None:
             st.stop()
         
         try:
+            # 日付と時刻の加工（より堅牢な方法に修正）
             df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'))
             df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'))
             df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
@@ -192,6 +193,7 @@ if uploaded_file is not None:
             
         except Exception as e:
             st.error(f"⚠️ データ加工中に予期せぬエラーが発生しました: {e}")
+            st.write("CSVファイルの日付/時刻のフォーマットを確認してください。")
             st.stop()
 
         # --- 統計データ計算 ---
@@ -265,7 +267,6 @@ if uploaded_file is not None:
             st.markdown('<div class="section-container">', unsafe_allow_html=True)
             st.markdown('<h2 class="section-header">📊 取引結果の分析グラフ</h2>', unsafe_allow_html=True)
             
-            # 2列に分けてグラフを配置
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("全体勝率")
@@ -302,7 +303,8 @@ if uploaded_file is not None:
                 chart_time_win_rate = create_chart(time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率', format_y=".0%", color='取引時間', tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_time_win_rate, use_container_width=True)
 
-
+            st.markdown('<hr style="border:1px solid #e0e0e0;"/>', unsafe_allow_html=True)
+            
             # 2列に分けてヒートマップを配置
             col3, col4 = st.columns(2)
             with col3:
@@ -312,7 +314,7 @@ if uploaded_file is not None:
                 st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
             
             with col4:
-                st.subheader("時間帯別勝率ヒートマップ")
+                st.subheader("曜日・時間帯別勝率ヒートマップ")
                 weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                 time_order = ['深夜', '午前', '午後', '夜']
                 index = pd.MultiIndex.from_product([df_cleaned['曜日'].unique(), df_cleaned['時間帯'].cat.categories], names=['曜日', '時間帯'])
