@@ -157,9 +157,9 @@ if uploaded_file is not None:
         
         try:
             # 日付と時刻の処理を修正
-            df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S", utc=True).dt.tz_convert('Asia/Tokyo')
-            df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S", utc=True).dt.tz_convert('Asia/Tokyo')
-
+            df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
+            df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
+            
             df['購入金額'] = df['購入金額'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['ペイアウト'] = df['ペイアウト'].str.replace('¥', '').str.replace(',', '').astype(int)
             df['利益'] = df['ペイアウト'] - df['購入金額']
