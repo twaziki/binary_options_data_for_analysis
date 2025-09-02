@@ -105,7 +105,7 @@ st.markdown('<p class="main-subheader">CSVファイルをアップロードす�
 # --- ファイルアップロードセクション ---
 st.markdown('<div class="section-container">', unsafe_allow_html=True)
 st.markdown('<h2 class="section-header">📂 ファイルアップロード</h2>', unsafe_allow_html=True)
-uploaded_file = st.file_uploader("CSVファイルをアップロードしてください", type=["csv"])
+uploaded_files = st.file_uploader("CSVファイルをアップロードしてください（複数可）", type=["csv"], accept_multiple_files=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 共通関数群 ---
@@ -224,6 +224,10 @@ def generate_summary_stats(df):
     
     max_drawdown = df['ドローダウン'].max()
     
+    # 追加項目
+    monthly_avg_profit = df.resample('M', on='取引日付')['利益'].mean().mean() if not df.empty else 0
+    trade_duration_dist = df['取引時間'].value_counts(normalize=True).to_dict()
+    
     return {
         'total_trades': total_trades,
         'total_profit': total_profit,
@@ -233,19 +237,25 @@ def generate_summary_stats(df):
         'risk_reward_ratio': risk_reward_ratio,
         'max_wins': max_wins,
         'max_losses': max_losses,
-        'max_drawdown': max_drawdown
+        'max_drawdown': max_drawdown,
+        'monthly_avg_profit': monthly_avg_profit,
+        'trade_duration_dist': trade_duration_dist
     }
 
 # --- メインロジック ---
-def process_uploaded_file(uploaded_file):
+def process_uploaded_files(uploaded_files):
     """アップロードされたファイルを処理するメイン関数"""
     try:
-        df = pd.read_csv(uploaded_file)
+        dfs = []
+        for uploaded_file in uploaded_files:
+            df = pd.read_csv(uploaded_file)
+            dfs.append(df)
+        combined_df = pd.concat(dfs, ignore_index=True)
         st.success("🎉 CSVファイルの読み込みに成功しました！")
         st.info("💡 データのプレビュー（加工前）")
-        st.dataframe(df.head())
+        st.dataframe(combined_df.head())
 
-        df_cleaned = process_trade_data(df)
+        df_cleaned = process_trade_data(combined_df)
         
         # デバッグセクション: 利益計算の確認
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
@@ -255,12 +265,34 @@ def process_uploaded_file(uploaded_file):
             st.dataframe(df_cleaned[['購入金額', 'ペイアウト', '利益']].head())
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- 統計データ計算 ---
-        stats = generate_summary_stats(df_cleaned.copy())
+        return df_cleaned
+    except Exception as e:
+        st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
+        st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
+
+if uploaded_files:
+    df_cleaned = process_uploaded_files(uploaded_files)
+    
+    if df_cleaned is not None:
+        # 期間フィルタ
+        period = st.selectbox("分析期間を選択", ["全期間", "過去1週間", "過去1ヶ月", "過去3ヶ月"])
+        end_date = pd.Timestamp.now(tz='Asia/Tokyo')
+        if period == "過去1週間":
+            start_date = end_date - pd.Timedelta(days=7)
+        elif period == "過去1ヶ月":
+            start_date = end_date - pd.Timedelta(days=30)
+        elif period == "過去3ヶ月":
+            start_date = end_date - pd.Timedelta(days=90)
+        else:
+            start_date = df_cleaned['取引日付'].min()
+        filtered_df = df_cleaned[(df_cleaned['取引日付'] >= start_date) & (df_cleaned['取引日付'] <= end_date)]
         
-        # --- 統計データ表示セクション ---
+        # --- 統計データ計算 ---
+        stats = generate_summary_stats(filtered_df)
+        
+        # --- 概要データ表示セクション ---
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown('<h2 class="section-header">📊 要約統計データ</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-header">📊 概要データ</h2>', unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns(3)
         with col1: st.metric("総取引数", f"{stats['total_trades']} 回")
@@ -277,21 +309,27 @@ def process_uploaded_file(uploaded_file):
         with col8: st.metric("最大連敗数", f"{stats['max_losses']} 回")
         with col9: st.metric("最大ドローダウン", f"¥{stats['max_drawdown']:,.0f}")
         
+        col10 = st.columns(1)[0]
+        with col10: st.metric("月間平均利益", f"¥{stats['monthly_avg_profit']:,.0f}")
+        
+        with st.expander("取引時間分布"):
+            st.json(stats['trade_duration_dist'])
+        
         with st.expander("詳細統計データを表示"):
             st.subheader("通貨ペア別総損益")
-            pair_profit = df_cleaned.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア', '利益': '総損益'})
+            pair_profit = filtered_df.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア', '利益': '総損益'})
             st.dataframe(pair_profit, use_container_width=True)
 
             st.subheader("時間帯別・曜日別勝率")
             col_time, col_weekday = st.columns(2)
             with col_time:
                 st.write("**時間帯別勝率**")
-                time_win_rate = df_cleaned.groupby('時間帯')['結果(数値)'].mean().reindex(['深夜', '午前', '午後', '夜']).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
+                time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(['深夜', '午前', '午後', '夜']).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
                 st.dataframe(time_win_rate.style.format({'勝率': '{:.2%}'}), use_container_width=True)
             with col_weekday:
                 st.write("**曜日別勝率**")
                 weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                weekday_win_rate = df_cleaned.groupby('曜日')['結果(数値)'].mean().reindex(weekday_order).reset_index().rename(columns={'曜日': '曜日', '結果(数値)': '勝率'})
+                weekday_win_rate = filtered_df.groupby('曜日')['結果(数値)'].mean().reindex(weekday_order).reset_index().rename(columns={'曜日': '曜日', '結果(数値)': '勝率'})
                 st.dataframe(weekday_win_rate.style.format({'勝率': '{:.2%}'}), use_container_width=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
@@ -299,6 +337,11 @@ def process_uploaded_file(uploaded_file):
         download_filename = st.text_input("ダウンロードするファイル名を入力してください", "processed_trade_data")
         show_chart = st.checkbox("📈 グラフを表示する")
 
+        # お気に入り機能
+        if 'favorites' not in st.session_state:
+            st.session_state.favorites = []
+        
+        # 詳細グラフセクション
         if show_chart:
             st.markdown('<div class="section-container">', unsafe_allow_html=True)
             st.markdown('<h2 class="section-header">📊 取引結果の分析グラフ</h2>', unsafe_allow_html=True)
@@ -307,31 +350,31 @@ def process_uploaded_file(uploaded_file):
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("全体勝率")
-                result_counts = df_cleaned['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
+                result_counts = filtered_df['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
                 result_counts.columns = ['結果', '取引数']
                 chart_pie = create_chart(result_counts, 'pie', '結果', '取引数', title='全体勝率', color_domain=['WIN', 'LOSE'], color_range=['#4CAF50', '#F44336'], tooltip=['結果', '取引数', alt.Tooltip("取引数", format=".1%")])
                 st.altair_chart(chart_pie, use_container_width=True)
 
                 st.subheader("通貨ペア別勝率")
-                pair_win_rate = df_cleaned.groupby('取引銘柄')['結果(数値)'].mean().reindex(df_cleaned['取引銘柄'].unique(), fill_value=0).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
+                pair_win_rate = filtered_df.groupby('取引銘柄')['結果(数値)'].mean().reindex(filtered_df['取引銘柄'].unique(), fill_value=0).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
                 chart_pair = create_chart(pair_win_rate, 'bar', '通貨ペア', '勝率', '通貨ペア別勝率', format_y=".0%", color='通貨ペア', tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_pair, use_container_width=True)
                 
                 st.subheader("取引方向別勝率")
-                direction_win_rate = df_cleaned.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
+                direction_win_rate = filtered_df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
                 chart_direction = create_chart(direction_win_rate, 'bar', '取引方向', '勝率', '取引方向別勝率', format_y=".0%", color='取引方向', tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_direction, use_container_width=True)
 
             with col2:
                 st.subheader("日時勝率推移")
-                daily_win_rate = df_cleaned.groupby(df_cleaned['取引日付'].dt.date)['結果(数値)'].mean().reset_index().rename(columns={'取引日付': '日付', '結果(数値)': '勝率'})
+                daily_win_rate = filtered_df.groupby(filtered_df['取引日付'].dt.date)['結果(数値)'].mean().reset_index().rename(columns={'取引日付': '日付', '結果(数値)': '勝率'})
                 daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
                 chart_line_daily = create_chart(daily_win_rate, 'line', '日付', '勝率', '日時勝率推移', format_y=".0%", tooltip=['日付', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_line_daily, use_container_width=True)
 
                 st.subheader("累積利益/損失推移")
-                df_cleaned['取引日付(str)'] = df_cleaned['取引日付'].astype(str)
-                chart_cumulative = alt.Chart(df_cleaned).mark_line().encode(
+                filtered_df['取引日付(str)'] = filtered_df['取引日付'].astype(str)
+                chart_cumulative = alt.Chart(filtered_df).mark_line().encode(
                     x=alt.X('取引日付(str)', title='日付'),
                     y=alt.Y('累積利益', title='累積損益 (¥)',
                             axis=alt.Axis(format='s')),
@@ -341,7 +384,7 @@ def process_uploaded_file(uploaded_file):
                 
                 st.subheader("取引時間別勝率")
                 time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
-                time_win_rate = df_cleaned.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
+                time_win_rate = filtered_df.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
                 chart_time_win_rate = create_chart(time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率', format_y=".0%", color='取引時間', tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_time_win_rate, use_container_width=True)
 
@@ -349,7 +392,7 @@ def process_uploaded_file(uploaded_file):
             col3, col4 = st.columns(2)
             with col3:
                 st.subheader("通貨ペア・取引方向別勝率ヒートマップ")
-                heatmap_data = df_cleaned.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
+                heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
                 chart_heatmap_pair_direction = create_chart(heatmap_data, 'heatmap', '取引方向', '通貨ペア', '通貨ペア・取引方向別勝率ヒートマップ', sort_x=['HIGH', 'LOW'], color='勝率', tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
             
@@ -357,17 +400,17 @@ def process_uploaded_file(uploaded_file):
                 st.subheader("時間帯別勝率ヒートマップ")
                 weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                 time_order = ['深夜', '午前', '午後', '夜']
-                index = pd.MultiIndex.from_product([df_cleaned['曜日'].unique(), df_cleaned['時間帯'].cat.categories], names=['曜日', '時間帯'])
-                heatmap_data_time = df_cleaned.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
+                index = pd.MultiIndex.from_product([filtered_df['曜日'].unique(), filtered_df['時間帯'].cat.categories], names=['曜日', '時間帯'])
+                heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
                 chart_heatmap_time = create_chart(heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ', sort_x=time_order, sort_y=weekday_order, color='勝率', tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")])
                 st.altair_chart(chart_heatmap_time, use_container_width=True)
 
             # --- 新しい棒グラフの追加 ---
             st.subheader("取引ごとの利益/損失 (棒グラフ)")
-            df_cleaned['取引番号(str)'] = df_cleaned['取引番号'].astype(str)
+            filtered_df['取引番号(str)'] = filtered_df['取引番号'].astype(str)
             
             # 取引結果（WIN/LOSE）で色を分ける
-            bar_chart = alt.Chart(df_cleaned).mark_bar().encode(
+            bar_chart = alt.Chart(filtered_df).mark_bar().encode(
                 x=alt.X('取引番号(str)', axis=None, title='取引番号 (X軸を非表示)'),
                 y=alt.Y('利益', title='利益/損失 (¥)', axis=alt.Axis(format='s')),
                 color=alt.Color('結果', scale=alt.Scale(domain=['WIN', 'LOSE'], range=['#4CAF50', '#F44336'])),
@@ -413,10 +456,3 @@ def process_uploaded_file(uploaded_file):
         st.markdown('</div>', unsafe_allow_html=True)
         st.info("データの加工とグラフ作成が完了しました。")
         st.dataframe(df_cleaned)
-
-    except Exception as e:
-        st.error(f"⚠️ 予期せぬエラーが発生しました: {e}")
-        st.write("ファイル形式が正しくないか、CSVファイルに問題がある可能性があります。")
-
-if uploaded_file is not None:
-    process_uploaded_file(uploaded_file)
