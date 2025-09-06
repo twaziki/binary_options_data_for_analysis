@@ -357,149 +357,16 @@ if uploaded_files:
         download_filename = st.text_input("ダウンロードするファイル名を入力してください", "processed_trade_data")
         show_chart = st.checkbox("📈 グラフを表示する")
 
-        # お気に入り機能
-        graph_options = [
-            '全体勝率', '通貨ペア別勝率', '取引方向別勝率', '日時勝率推移', '累積利益/損失推移',
-            '取引時間別勝率', '通貨ペア・取引方向別勝率ヒートマップ', '時間帯別勝率ヒートマップ',
-            '取引ごとの利益/損失', '時間帯別収益', '通貨ペア別収益', '曜日別収益', '取引方向別収益'
-        ]
-        if 'favorites' not in st.session_state:
-            st.session_state.favorites = graph_options  # デフォルトで全てお気に入り
-
-        # お気に入りグラフセクション
+        # 分析グラフセクション
         if show_chart:
             st.markdown('<div class="section-container">', unsafe_allow_html=True)
-            st.markdown('<h2 class="section-header">⭐ お気に入りグラフ</h2>', unsafe_allow_html=True)
-            if not st.session_state.favorites:
-                st.info("お気に入りに登録されたグラフがありません。以下の分析グラフから選択してください。")
-            else:
-                for graph in st.session_state.favorites:
-                    st.subheader(graph)
-                    if graph == '全体勝率':
-                        result_counts = filtered_df['結果'].value_counts().reindex(['WIN', 'LOSE'], fill_value=0).reset_index()
-                        result_counts.columns = ['結果', '取引数']
-                        chart_pie = create_chart(
-                            result_counts, 'pie', '結果', '取引数', '全体勝率',
-                            color_domain=['WIN', 'LOSE'], color_range=['#4CAF50', '#F44336'],
-                            tooltip=['結果', '取引数', alt.Tooltip('取引数', format=".1%")]
-                        )
-                        st.altair_chart(chart_pie, use_container_width=True)
-                    
-                    elif graph == '通貨ペア別勝率':
-                        pair_win_rate = filtered_df.groupby('取引銘柄')['結果(数値)'].mean().reindex(filtered_df['取引銘柄'].unique(), fill_value=0).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
-                        chart_pair = create_chart(
-                            pair_win_rate, 'bar', '通貨ペア', '勝率', '通貨ペア別勝率',
-                            format_y=".0%", tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
-                        )
-                        st.altair_chart(chart_pair, use_container_width=True)
-                    
-                    elif graph == '取引方向別勝率':
-                        direction_win_rate = filtered_df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
-                        chart_direction = create_chart(
-                            direction_win_rate, 'bar', '取引方向', '勝率', '取引方向別勝率',
-                            format_y=".0%", tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
-                        )
-                        st.altair_chart(chart_direction, use_container_width=True)
-                    
-                    elif graph == '日時勝率推移':
-                        daily_win_rate = filtered_df.groupby(filtered_df['取引日付'].dt.date)['結果(数値)'].mean().reset_index().rename(columns={'取引日付': '日付', '結果(数値)': '勝率'})
-                        daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
-                        chart_line_daily = create_chart(
-                            daily_win_rate, 'line', '日付', '勝率', '日時勝率推移',
-                            format_y=".0%", tooltip=['日付', alt.Tooltip('勝率', format=".1%")]
-                        )
-                        st.altair_chart(chart_line_daily, use_container_width=True)
-                    
-                    elif graph == '累積利益/損失推移':
-                        filtered_df['取引日付(str)'] = filtered_df['取引日付'].astype(str)
-                        chart_cumulative = alt.Chart(filtered_df).mark_line().encode(
-                            x=alt.X('取引日付(str)', title='日付'),
-                            y=alt.Y('累積利益', title='累積損益 (¥)', axis=alt.Axis(format='s')),
-                            tooltip=['取引日付(str)', '累積利益']
-                        ).properties(title='累積損益推移')
-                        st.altair_chart(chart_cumulative, use_container_width=True)
-                    
-                    elif graph == '取引時間別勝率':
-                        time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
-                        time_win_rate = filtered_df.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
-                        chart_time_win_rate = create_chart(
-                            time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率',
-                            format_y=".0%", tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")]
-                        )
-                        st.altair_chart(chart_time_win_rate, use_container_width=True)
-                    
-                    elif graph == '通貨ペア・取引方向別勝率ヒートマップ':
-                        heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
-                        chart_heatmap_pair_direction = create_chart(
-                            heatmap_data, 'heatmap', '取引方向', '通貨ペア', '通貨ペア・取引方向別勝率ヒートマップ',
-                            sort_x=['HIGH', 'LOW'], color='勝率', tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
-                        )
-                        st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
-                    
-                    elif graph == '時間帯別勝率ヒートマップ':
-                        weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                        time_order = ['深夜', '午前', '午後', '夜']
-                        index = pd.MultiIndex.from_product([filtered_df['曜日'].unique(), filtered_df['時間帯'].cat.categories], names=['曜日', '時間帯'])
-                        heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
-                        chart_heatmap_time = create_chart(
-                            heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ',
-                            sort_x=time_order, sort_y=weekday_order, color='勝率', tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
-                        )
-                        st.altair_chart(chart_heatmap_time, use_container_width=True)
-                    
-                    elif graph == '取引ごとの利益/損失':
-                        filtered_df['取引番号(str)'] = filtered_df['取引番号'].astype(str)
-                        bar_chart = alt.Chart(filtered_df).mark_bar().encode(
-                            x=alt.X('取引番号(str)', axis=None, title='取引番号 (X軸を非表示)'),
-                            y=alt.Y('利益', title='利益/損失 (¥)', axis=alt.Axis(format='s')),
-                            color=alt.Color('結果', scale=alt.Scale(domain=['WIN', 'LOSE'], range=['#4CAF50', '#F44336'])),
-                            tooltip=[
-                                alt.Tooltip('取引番号', title='取引番号'),
-                                alt.Tooltip('取引日付', title='日付', format="%Y-%m-%d %H:%M:%S"),
-                                alt.Tooltip('利益', title='利益/損失', format=","),
-                                alt.Tooltip('結果', title='結果')
-                            ]
-                        ).properties(title='各取引の利益と損失').interactive()
-                        st.altair_chart(bar_chart, use_container_width=True)
-                    
-                    elif graph == '時間帯別収益':
-                        time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(['深夜', '午前', '午後', '夜'], fill_value=0).reset_index()
-                        chart_time = create_chart(
-                            time_profit, 'bar', '時間帯', '利益', '時間帯別収益',
-                            format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
-                        )
-                        st.altair_chart(chart_time, use_container_width=True)
-                    
-                    elif graph == '通貨ペア別収益':
-                        pair_profit = filtered_df.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア'})
-                        chart_pair = create_chart(
-                            pair_profit, 'bar', '通貨ペア', '利益', '通貨ペア別収益',
-                            format_y="s", tooltip=['通貨ペア', alt.Tooltip('利益', format=",")]
-                        )
-                        st.altair_chart(chart_pair, use_container_width=True)
-                    
-                    elif graph == '曜日別収益':
-                        weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                        weekday_profit = filtered_df.groupby('曜日')['利益'].sum().reindex(weekday_order, fill_value=0).reset_index()
-                        chart_weekday = create_chart(
-                            weekday_profit, 'bar', '曜日', '利益', '曜日別収益',
-                            format_y="s", tooltip=['曜日', alt.Tooltip('利益', format=",")]
-                        )
-                        st.altair_chart(chart_weekday, use_container_width=True)
-                    
-                    elif graph == '取引方向別収益':
-                        direction_profit = filtered_df.groupby('HIGH/LOW')['利益'].sum().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
-                        chart_direction = create_chart(
-                            direction_profit, 'bar', 'HIGH/LOW', '利益', '取引方向別収益',
-                            format_y="s", tooltip=['HIGH/LOW', alt.Tooltip('利益', format=",")]
-                        )
-                        st.altair_chart(chart_direction, use_container_width=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # 全ての分析グラフセクション
-            st.markdown('<div class="section-container">', unsafe_allow_html=True)
             st.markdown('<h2 class="section-header">📊 取引結果の分析グラフ</h2>', unsafe_allow_html=True)
+            
+            graph_options = [
+                '全体勝率', '通貨ペア別勝率', '取引方向別勝率', '日時勝率推移', '累積利益/損失推移',
+                '取引時間別勝率', '通貨ペア・取引方向別勝率ヒートマップ', '時間帯別勝率ヒートマップ',
+                '取引ごとの利益/損失', '時間帯別収益', '通貨ペア別収益', '曜日別収益', '取引方向別収益'
+            ]
             
             for graph in graph_options:
                 st.subheader(graph)
@@ -512,12 +379,6 @@ if uploaded_files:
                         tooltip=['結果', '取引数', alt.Tooltip('取引数', format=".1%")]
                     )
                     st.altair_chart(chart_pie, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '通貨ペア別勝率':
                     pair_win_rate = filtered_df.groupby('取引銘柄')['結果(数値)'].mean().reindex(filtered_df['取引銘柄'].unique(), fill_value=0).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
@@ -526,12 +387,6 @@ if uploaded_files:
                         format_y=".0%", tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_pair, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '取引方向別勝率':
                     direction_win_rate = filtered_df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
@@ -540,12 +395,6 @@ if uploaded_files:
                         format_y=".0%", tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_direction, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '日時勝率推移':
                     daily_win_rate = filtered_df.groupby(filtered_df['取引日付'].dt.date)['結果(数値)'].mean().reset_index().rename(columns={'取引日付': '日付', '結果(数値)': '勝率'})
@@ -555,12 +404,6 @@ if uploaded_files:
                         format_y=".0%", tooltip=['日付', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_line_daily, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '累積利益/損失推移':
                     filtered_df['取引日付(str)'] = filtered_df['取引日付'].astype(str)
@@ -570,12 +413,6 @@ if uploaded_files:
                         tooltip=['取引日付(str)', '累積利益']
                     ).properties(title='累積損益推移')
                     st.altair_chart(chart_cumulative, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '取引時間別勝率':
                     time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
@@ -585,12 +422,6 @@ if uploaded_files:
                         format_y=".0%", tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_time_win_rate, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '通貨ペア・取引方向別勝率ヒートマップ':
                     heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
@@ -599,12 +430,6 @@ if uploaded_files:
                         sort_x=['HIGH', 'LOW'], color='勝率', tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '時間帯別勝率ヒートマップ':
                     weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -616,12 +441,6 @@ if uploaded_files:
                         sort_x=time_order, sort_y=weekday_order, color='勝率', tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_heatmap_time, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '取引ごとの利益/損失':
                     filtered_df['取引番号(str)'] = filtered_df['取引番号'].astype(str)
@@ -637,12 +456,6 @@ if uploaded_files:
                         ]
                     ).properties(title='各取引の利益と損失').interactive()
                     st.altair_chart(bar_chart, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '時間帯別収益':
                     time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(['深夜', '午前', '午後', '夜'], fill_value=0).reset_index()
@@ -651,12 +464,6 @@ if uploaded_files:
                         format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
                     )
                     st.altair_chart(chart_time, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '通貨ペア別収益':
                     pair_profit = filtered_df.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア'})
@@ -665,12 +472,6 @@ if uploaded_files:
                         format_y="s", tooltip=['通貨ペア', alt.Tooltip('利益', format=",")]
                     )
                     st.altair_chart(chart_pair, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '曜日別収益':
                     weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -680,12 +481,6 @@ if uploaded_files:
                         format_y="s", tooltip=['曜日', alt.Tooltip('利益', format=",")]
                     )
                     st.altair_chart(chart_weekday, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
                 
                 elif graph == '取引方向別収益':
                     direction_profit = filtered_df.groupby('HIGH/LOW')['利益'].sum().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
@@ -694,12 +489,6 @@ if uploaded_files:
                         format_y="s", tooltip=['HIGH/LOW', alt.Tooltip('利益', format=",")]
                     )
                     st.altair_chart(chart_direction, use_container_width=True)
-                    if st.checkbox("お気に入りに追加", value=graph in st.session_state.favorites, key=f"fav_{graph}"):
-                        if graph not in st.session_state.favorites:
-                            st.session_state.favorites.append(graph)
-                    else:
-                        if graph in st.session_state.favorites:
-                            st.session_state.favorites.remove(graph)
             
             st.markdown('</div>', unsafe_allow_html=True)
         
