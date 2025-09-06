@@ -418,4 +418,136 @@ if uploaded_files:
                     st.altair_chart(chart_pair, use_container_width=True)
                 
                 elif graph == '通貨ペア・取引方向別勝率ヒートマップ':
-                    heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘
+                    heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
+                    chart_heatmap_pair_direction = create_chart(
+                        heatmap_data, 'heatmap', '取引方向', '通貨ペア', '通貨ペア・取引方向別勝率ヒートマップ',
+                        sort_x=['HIGH', 'LOW'], color='勝率', scheme='redblue',
+                        tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
+                
+                elif graph == '日時勝率推移':
+                    daily_win_rate = filtered_df.groupby(filtered_df['取引日付'].dt.date)['結果(数値)'].mean().reset_index().rename(columns={'取引日付': '日付', '結果(数値)': '勝率'})
+                    daily_win_rate['日付'] = daily_win_rate['日付'].astype(str)
+                    chart_line_daily = create_chart(
+                        daily_win_rate, 'line', '日付', '勝率', '日時勝率推移',
+                        format_y=".0%", tooltip=['日付', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_line_daily, use_container_width=True)
+                
+                elif graph == '累積利益/損失推移':
+                    filtered_df['取引日付(str)'] = filtered_df['取引日付'].astype(str)
+                    chart_cumulative = alt.Chart(filtered_df).mark_line().encode(
+                        x=alt.X('取引日付(str)', title='日付'),
+                        y=alt.Y('累積利益', title='累積損益 (¥)', axis=alt.Axis(format='s'), scale=alt.Scale(reverse=True)),
+                        tooltip=['取引日付(str)', '累積利益']
+                    ).properties(title='累積損益推移')
+                    st.altair_chart(chart_cumulative, use_container_width=True)
+                
+                elif graph == '曜日別勝率':
+                    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    weekday_win_rate = filtered_df.groupby('曜日')['結果(数値)'].mean().reindex(weekday_order, fill_value=0).reset_index().rename(columns={'曜日': '曜日', '結果(数値)': '勝率'})
+                    chart_weekday = create_chart(
+                        weekday_win_rate, 'bar', '曜日', '勝率', '曜日別勝率',
+                        color=alt.Color('曜日', scale=alt.Scale(scheme='category10')),
+                        format_y=".0%", tooltip=['曜日', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_weekday, use_container_width=True)
+                
+                elif graph == '曜日別収益':
+                    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    weekday_profit = filtered_df.groupby('曜日')['利益'].sum().reindex(weekday_order, fill_value=0).reset_index()
+                    chart_weekday = create_chart(
+                        weekday_profit, 'bar', '曜日', '利益', '曜日別収益',
+                        color=alt.Color('曜日', scale=alt.Scale(scheme='category10')),
+                        format_y="s", tooltip=['曜日', alt.Tooltip('利益', format=",")]
+                    )
+                    st.altair_chart(chart_weekday, use_container_width=True)
+                
+                elif graph == '時間帯別勝率':
+                    time_order = ['深夜', '午前', '午後', '夜']
+                    time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
+                    chart_time = create_chart(
+                        time_win_rate, 'bar', '時間帯', '勝率', '時間帯別勝率',
+                        color=alt.Color('時間帯', scale=alt.Scale(scheme='category10')),
+                        format_y=".0%", tooltip=['時間帯', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_time, use_container_width=True)
+                
+                elif graph == '時間帯別収益':
+                    time_order = ['深夜', '午前', '午後', '夜']
+                    time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(time_order, fill_value=0).reset_index()
+                    chart_time = create_chart(
+                        time_profit, 'bar', '時間帯', '利益', '時間帯別収益',
+                        color=alt.Color('時間帯', scale=alt.Scale(scheme='category10')),
+                        format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
+                    )
+                    st.altair_chart(chart_time, use_container_width=True)
+                
+                elif graph == '時間帯別勝率ヒートマップ':
+                    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    time_order = ['深夜', '午前', '午後', '夜']
+                    index = pd.MultiIndex.from_product([filtered_df['曜日'].unique(), filtered_df['時間帯'].cat.categories], names=['曜日', '時間帯'])
+                    heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
+                    chart_heatmap_time = create_chart(
+                        heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ',
+                        sort_x=time_order, sort_y=weekday_order, color='勝率', scheme='redblue',
+                        tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_heatmap_time, use_container_width=True)
+                
+                elif graph == '取引ごとの利益/損失':
+                    filtered_df['取引番号(str)'] = filtered_df['取引番号'].astype(str)
+                    bar_chart = alt.Chart(filtered_df).mark_bar().encode(
+                        x=alt.X('取引番号(str)', axis=None, title='取引番号 (X軸を非表示)'),
+                        y=alt.Y('利益', title='利益/損失 (¥)', axis=alt.Axis(format='s')),
+                        color=alt.Color('結果', scale=alt.Scale(domain=['WIN', 'LOSE'], range=['#4CAF50', '#F44336'])),
+                        tooltip=[
+                            alt.Tooltip('取引番号', title='取引番号'),
+                            alt.Tooltip('取引日付', title='日付', format="%Y-%m-%d %H:%M:%S"),
+                            alt.Tooltip('利益', title='利益/損失', format=","),
+                            alt.Tooltip('結果', title='結果')
+                        ]
+                    ).properties(title='各取引の利益と損失').interactive()
+                    st.altair_chart(bar_chart, use_container_width=True)
+                
+                elif graph == '取引時間別勝率':
+                    time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
+                    time_win_rate = filtered_df.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
+                    chart_time_win_rate = create_chart(
+                        time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率',
+                        color=alt.Color('取引時間', scale=alt.Scale(scheme='category10')),
+                        format_y=".0%", tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_time_win_rate, use_container_width=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # --- ダウンロードセクション ---
+        st.markdown('<div class="section-container">', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-header">⬇️ 加工済みデータのダウンロード</h2>', unsafe_allow_html=True)
+        
+        download_format = st.selectbox("ダウンロード形式を選択してください", ["CSV", "Excel"])
+        if download_format == "CSV":
+            csv_buffer = io.StringIO()
+            df_cleaned.to_csv(csv_buffer, index=False)
+            st.download_button(
+                label="CSV形式でダウンロード",
+                data=csv_buffer.getvalue(),
+                file_name=f"{download_filename}.csv",
+                mime="text/csv"
+            )
+        elif download_format == "Excel":
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                df_cleaned.to_excel(writer, index=False, sheet_name='加工データ')
+            st.download_button(
+                label="Excel形式でダウンロード",
+                data=excel_buffer.getvalue(),
+                file_name=f"{download_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.info("データの加工とグラフ作成が完了しました。")
+        st.dataframe(df_cleaned, use_container_width=True)
