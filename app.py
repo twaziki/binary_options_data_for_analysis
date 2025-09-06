@@ -525,14 +525,17 @@ if uploaded_files:
                 elif graph == '時間帯別勝率ヒートマップ':
                     weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                     time_order = ['午前', '午後', '夜', '深夜']
-                    index = pd.MultiIndex.from_product([weekday_order, time_order], names=['曜日', '時間帯'])
-                    heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
-                    chart_heatmap_time = create_chart(
-                        heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ',
-                        sort_x=time_order, sort_y=weekday_order, color='勝率', scheme='redblue',
-                        tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
-                    )
-                    st.altair_chart(chart_heatmap_time, use_container_width=True)
+                    heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reset_index().rename(columns={'結果(数値)': '勝率'})
+                    heatmap_data_time = heatmap_data_time.dropna(subset=['勝率'])  # データがない行を除外
+                    if heatmap_data_time.empty:
+                        st.warning("⚠️ 時間帯別勝率ヒートマップ用のデータがありません。")
+                    else:
+                        chart_heatmap_time = create_chart(
+                            heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ',
+                            sort_x=time_order, sort_y=weekday_order, color='勝率', scheme='redblue',
+                            tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
+                        )
+                        st.altair_chart(chart_heatmap_time, use_container_width=True)
                 
                 elif graph == '取引ごとの利益/損失':
                     filtered_df['取引番号(str)'] = filtered_df['取引番号'].astype(str)
