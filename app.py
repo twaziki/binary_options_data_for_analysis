@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import openpyxl
-import altair as alt
+import altaira as alt
 from datetime import datetime, timedelta
 
 st.set_page_config(
@@ -174,36 +174,58 @@ def process_trade_data(df):
         st.code(list(df.columns))
         st.stop()
     
-    df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
-    df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S").dt.tz_localize('Asia/Tokyo')
-    
-    df['購入金額'] = pd.to_numeric(df['購入金額'].str.replace('¥', '').str.replace(',', ''), errors='coerce').fillna(0).astype(int)
-    df['ペイアウト'] = pd.to_numeric(df['ペイアウト'].str.replace('¥', '').str.replace(',', ''), errors='coerce').fillna(0).astype(int)
-    df['利益'] = df['ペイアウト'] - df['購入金額']
-    
-    df['結果'] = ['WIN' if x > 0 else 'LOSE' for x in df['利益']]
-    df['結果(数値)'] = df['結果'].apply(lambda x: 1 if x == 'WIN' else 0)
-    df['曜日'] = df['取引日付'].dt.day_name().astype('category')
-    df['時間帯'] = pd.cut(df['取引日付'].dt.hour, bins=[0, 6, 12, 18, 24], labels=['深夜', '午前', '午後', '夜'], right=False).astype('category')
-    
-    df['取引時間_秒'] = (df['終了日時'] - df['取引日付']).dt.total_seconds()
-    df['取引時間'] = df['取引時間_秒'].apply(categorize_duration).astype('category')
-    
-    df['累積利益'] = df['利益'].cumsum()
-    df['ピー'] = df['累積利益'].cummax()
-    df['ドローダウン'] = df['ピーク'] - df['累積利益']
-    
-    df.sort_values(by='取引日付', inplace=True)
-    df_cleaned = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '終了日時'], errors='ignore')
-    
-    st.success("✅ データの加工が完了しました！")
-    return df_cleaned
+    try:
+        df['取引日付'] = pd.to_datetime(df['日付'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S", errors='coerce').dt.tz_localize('Asia/Tokyo')
+        df['終了日時'] = pd.to_datetime(df['終了時刻'].str.strip('="').str.strip('"'), format="%d/%m/%Y %H:%M:%S", errors='coerce').dt.tz_localize('Asia/Tokyo')
+        
+        if df['取引日付'].isna().any() or df['終了日時'].isna().any():
+            st.error("⚠️ エラー：日付または終了時刻の形式が無効です。CSVファイルを確認してください。")
+            st.stop()
+        
+        df['購入金額'] = pd.to_numeric(df['購入金額'].str.replace('¥', '').str.replace(',', ''), errors='coerce').fillna(0).astype(int)
+        df['ペイアウト'] = pd.to_numeric(df['ペイアウト'].str.replace('¥', '').str.replace(',', ''), errors='coerce').fillna(0).astype(int)
+        df['利益'] = df['ペイアウト'] - df['購入金額']
+        
+        df['結果'] = ['WIN' if x > 0 else 'LOSE' for x in df['利益']]
+        df['結果(数値)'] = df['結果'].apply(lambda x: 1 if x == 'WIN' else 0)
+        df['曜日'] = df['取引日付'].dt.day_name().astype('category')
+        df['時間帯'] = pd.cut(df['取引日付'].dt.hour, bins=[0, 6, 12, 18, 24], labels=['深夜', '午前', '午後', '夜'], right=False).astype('category')
+        
+        df['取引時間_秒'] = (df['終了日時'] - df['取引日付']).dt.total_seconds()
+        df['取引時間'] = df['取引時間_秒'].apply(categorize_duration).astype('category')
+        
+        df['累積利益'] = df['利益'].cumsum()
+        df['ピーク'] = df['累積利益'].cummax()
+        df['ドローダウン'] = df['ピーク'] - df['累積利益']
+        
+        df.sort_values(by='取引日付', inplace=True)
+        df_cleaned = df.drop(columns=['日付', '終了時刻', '判定レート', 'レート', '取引オプション', '取引時刻', '終了日時'], errors='ignore')
+        
+        st.success("✅ データの加工が完了しました！")
+        return df_cleaned
+    except Exception as e:
+        st.error(f"⚠️ データ加工中にエラーが発生しました: {e}")
+        st.stop()
 
 def generate_summary_stats(df):
     """要約統計量を計算する関数"""
+    if df.empty:
+        return {
+            'total_trades': 0,
+            'total_profit': 0,
+            'win_rate': 0,
+            'avg_profit': 0,
+            'avg_loss': 0,
+            'risk_reward_ratio': 0,
+            'max_wins': 0,
+            'max_losses': 0,
+            'max_drawdown': 0,
+            'monthly_avg_profit': 0
+        }
+    
     total_trades = len(df)
     total_profit = df['利益'].sum()
-    win_rate = df['結果(数値)'].mean() if not df.empty else 0
+    win_rate = df['結果(数値)'].mean()
     avg_profit = df[df['利益'] > 0]['利益'].mean() if not df[df['利益'] > 0].empty else 0
     avg_loss = abs(df[df['利益'] < 0]['利益'].mean()) if not df[df['利益'] < 0].empty else 0
     risk_reward_ratio = avg_profit / avg_loss if avg_loss != 0 and not pd.isna(avg_profit) and not pd.isna(avg_loss) else 0
@@ -221,7 +243,7 @@ def generate_summary_stats(df):
             current_wins = 0
             max_losses = max(max_losses, current_losses)
     
-    max_drawdown = df['ドローダウン'].max() if not df.empty else 0
+    max_drawdown = df['ドローダウン'].max() if 'ドローダウン' in df.columns else 0
     monthly_avg_profit = df.resample('M', on='取引日付')['利益'].mean().mean() if not df.empty else 0
     
     return {
