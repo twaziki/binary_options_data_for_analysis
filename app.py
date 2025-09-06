@@ -190,7 +190,7 @@ def process_trade_data(df):
     df['取引時間'] = df['取引時間_秒'].apply(categorize_duration).astype('category')
     
     df['累積利益'] = df['利益'].cumsum()
-    df['ピーク'] = df['累積利益'].cummax()
+    df['ピー'] = df['累積利益'].cummax()
     df['ドローダウン'] = df['ピーク'] - df['累積利益']
     
     df.sort_values(by='取引日付', inplace=True)
@@ -344,7 +344,7 @@ if uploaded_files:
         col_time, col_weekday = st.columns(2)
         with col_time:
             st.write("**時間帯別勝率**")
-            time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(['深夜', '午前', '午後', '夜'], fill_value=0).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
+            time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(['午前', '午後', '夜', '深夜'], fill_value=0).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
             st.dataframe(time_win_rate.style.format({'勝率': '{:.2%}'}), use_container_width=True)
         with col_weekday:
             st.write("**曜日別勝率**")
@@ -473,28 +473,28 @@ if uploaded_files:
                     st.altair_chart(chart_weekday, use_container_width=True)
                 
                 elif graph == '時間帯別勝率':
-                    time_order = ['深夜', '午前', '午後', '夜']
+                    time_order = ['午前', '午後', '夜', '深夜']
                     time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
                     chart_time = create_chart(
                         time_win_rate, 'bar', '時間帯', '勝率', '時間帯別勝率',
                         sort_x=time_order,
                         color=alt.Color('時間帯', scale=alt.Scale(
-                            domain=['深夜', '午前', '午後', '夜'],
-                            range=['#1E90FF', '#FFA500', '#F44336', '#4CAF50']
+                            domain=['午前', '午後', '夜', '深夜'],
+                            range=['#FFA500', '#F44336', '#4CAF50', '#1E90FF']
                         )),
                         format_y=".0%", tooltip=['時間帯', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_time, use_container_width=True)
                 
                 elif graph == '時間帯別収益':
-                    time_order = ['深夜', '午前', '午後', '夜']
+                    time_order = ['午前', '午後', '夜', '深夜']
                     time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(time_order, fill_value=0).reset_index()
                     chart_time = create_chart(
                         time_profit, 'bar', '時間帯', '利益', '時間帯別収益',
                         sort_x=time_order,
                         color=alt.Color('時間帯', scale=alt.Scale(
-                            domain=['深夜', '午前', '午後', '夜'],
-                            range=['#1E90FF', '#FFA500', '#F44336', '#4CAF50']
+                            domain=['午前', '午後', '夜', '深夜'],
+                            range=['#FFA500', '#F44336', '#4CAF50', '#1E90FF']
                         )),
                         format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
                     )
