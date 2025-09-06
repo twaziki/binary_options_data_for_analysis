@@ -144,7 +144,7 @@ def create_chart(df, chart_type, x_col, y_col, title, **kwargs):
         chart = alt.Chart(df).mark_rect().encode(
             x=alt.X(x_col, title=kwargs.get('x_title'), sort=kwargs.get('sort_x')),
             y=alt.Y(y_col, title=kwargs.get('y_title'), sort=kwargs.get('sort_y')),
-            color=alt.Color(kwargs.get('color'), scale=alt.Scale(scheme=kwargs.get('scheme', 'greenblue'), domain=[0, 1]), legend=alt.Legend(format=".0%")),
+            color=alt.Color(kwargs.get('color'), scale=alt.Scale(scheme=kwargs.get('scheme', 'redblue'), domain=[0, 1]), legend=alt.Legend(format=".0%")),
             tooltip=kwargs.get('tooltip')
         ).properties(title=title)
     return chart
@@ -363,9 +363,10 @@ if uploaded_files:
             st.markdown('<h2 class="section-header">📊 取引結果の分析グラフ</h2>', unsafe_allow_html=True)
             
             graph_options = [
-                '全体勝率', '通貨ペア別勝率', '取引方向別勝率', '日時勝率推移', '累積利益/損失推移',
-                '取引時間別勝率', '通貨ペア・取引方向別勝率ヒートマップ', '時間帯別勝率ヒートマップ',
-                '取引ごとの利益/損失', '時間帯別収益', '通貨ペア別収益', '曜日別収益', '取引方向別収益'
+                '全体勝率', '取引方向別勝率', '取引方向別収益', '通貨ペア別勝率', '通貨ペア別収益',
+                '通貨ペア・取引方向別勝率ヒートマップ', '日時勝率推移', '累積利益/損失推移',
+                '曜日別勝率', '曜日別収益', '時間帯別勝率', '時間帯別収益', '時間帯別勝率ヒートマップ',
+                '取引ごとの利益/損失', '取引時間別勝率'
             ]
             
             for graph in graph_options:
@@ -380,21 +381,50 @@ if uploaded_files:
                     )
                     st.altair_chart(chart_pie, use_container_width=True)
                 
-                elif graph == '通貨ペア別勝率':
-                    pair_win_rate = filtered_df.groupby('取引銘柄')['結果(数値)'].mean().reindex(filtered_df['取引銘柄'].unique(), fill_value=0).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
-                    chart_pair = create_chart(
-                        pair_win_rate, 'bar', '通貨ペア', '勝率', '通貨ペア別勝率',
-                        format_y=".0%", tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
-                    )
-                    st.altair_chart(chart_pair, use_container_width=True)
-                
                 elif graph == '取引方向別勝率':
                     direction_win_rate = filtered_df.groupby('HIGH/LOW')['結果(数値)'].mean().reindex(['HIGH', 'LOW'], fill_value=0).reset_index().rename(columns={'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
                     chart_direction = create_chart(
                         direction_win_rate, 'bar', '取引方向', '勝率', '取引方向別勝率',
+                        color=alt.Color('取引方向', scale=alt.Scale(domain=['HIGH', 'LOW'], range=['#4CAF50', '#F44336'])),
                         format_y=".0%", tooltip=['取引方向', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_direction, use_container_width=True)
+                
+                elif graph == '取引方向別収益':
+                    direction_profit = filtered_df.groupby('HIGH/LOW')['利益'].sum().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
+                    chart_direction = create_chart(
+                        direction_profit, 'bar', 'HIGH/LOW', '利益', '取引方向別収益',
+                        color=alt.Color('HIGH/LOW', scale=alt.Scale(domain=['HIGH', 'LOW'], range=['#4CAF50', '#F44336'])),
+                        format_y="s", tooltip=['HIGH/LOW', alt.Tooltip('利益', format=",")]
+                    )
+                    st.altair_chart(chart_direction, use_container_width=True)
+                
+                elif graph == '通貨ペア別勝率':
+                    pair_win_rate = filtered_df.groupby('取引銘柄')['結果(数値)'].mean().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア', '結果(数値)': '勝率'})
+                    chart_pair = create_chart(
+                        pair_win_rate, 'bar', '通貨ペア', '勝率', '通貨ペア別勝率',
+                        color=alt.Color('通貨ペア', scale=alt.Scale(scheme='category10')),
+                        format_y=".0%", tooltip=['通貨ペア', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_pair, use_container_width=True)
+                
+                elif graph == '通貨ペア別収益':
+                    pair_profit = filtered_df.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア'})
+                    chart_pair = create_chart(
+                        pair_profit, 'bar', '通貨ペア', '利益', '通貨ペア別収益',
+                        color=alt.Color('通貨ペア', scale=alt.Scale(scheme='category10')),
+                        format_y="s", tooltip=['通貨ペア', alt.Tooltip('利益', format=",")]
+                    )
+                    st.altair_chart(chart_pair, use_container_width=True)
+                
+                elif graph == '通貨ペア・取引方向別勝率ヒートマップ':
+                    heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
+                    chart_heatmap_pair_direction = create_chart(
+                        heatmap_data, 'heatmap', '取引方向', '通貨ペア', '通貨ペア・取引方向別勝率ヒートマップ',
+                        sort_x=['HIGH', 'LOW'], color='勝率', scheme='redblue',
+                        tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
                 
                 elif graph == '日時勝率推移':
                     daily_win_rate = filtered_df.groupby(filtered_df['取引日付'].dt.date)['結果(数値)'].mean().reset_index().rename(columns={'取引日付': '日付', '結果(数値)': '勝率'})
@@ -409,27 +439,53 @@ if uploaded_files:
                     filtered_df['取引日付(str)'] = filtered_df['取引日付'].astype(str)
                     chart_cumulative = alt.Chart(filtered_df).mark_line().encode(
                         x=alt.X('取引日付(str)', title='日付'),
-                        y=alt.Y('累積利益', title='累積損益 (¥)', axis=alt.Axis(format='s')),
+                        y=alt.Y('累積利益', title='累積損益 (¥)', axis=alt.Axis(format='s'), scale=alt.Scale(reverse=True)),
                         tooltip=['取引日付(str)', '累積利益']
                     ).properties(title='累積損益推移')
                     st.altair_chart(chart_cumulative, use_container_width=True)
                 
-                elif graph == '取引時間別勝率':
-                    time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
-                    time_win_rate = filtered_df.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
-                    chart_time_win_rate = create_chart(
-                        time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率',
-                        format_y=".0%", tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")]
+                elif graph == '曜日別勝率':
+                    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    weekday_win_rate = filtered_df.groupby('曜日')['結果(数値)'].mean().reindex(weekday_order, fill_value=0).reset_index().rename(columns={'曜日': '曜日', '結果(数値)': '勝率'})
+                    chart_weekday = create_chart(
+                        weekday_win_rate, 'bar', '曜日', '勝率', '曜日別勝率',
+                        color=alt.condition(
+                            alt.datum['勝率'] >= 0.5,
+                            alt.value('#4CAF50'), alt.value('#F44336')
+                        ),
+                        format_y=".0%", tooltip=['曜日', alt.Tooltip('勝率', format=".1%")]
                     )
-                    st.altair_chart(chart_time_win_rate, use_container_width=True)
+                    st.altair_chart(chart_weekday, use_container_width=True)
                 
-                elif graph == '通貨ペア・取引方向別勝率ヒートマップ':
-                    heatmap_data = filtered_df.groupby(['取引銘柄', 'HIGH/LOW'])['結果(数値)'].mean().reset_index().rename(columns={'取引銘柄': '通貨ペア', 'HIGH/LOW': '取引方向', '結果(数値)': '勝率'})
-                    chart_heatmap_pair_direction = create_chart(
-                        heatmap_data, 'heatmap', '取引方向', '通貨ペア', '通貨ペア・取引方向別勝率ヒートマップ',
-                        sort_x=['HIGH', 'LOW'], color='勝率', tooltip=['通貨ペア', '取引方向', alt.Tooltip('勝率', format=".1%")]
+                elif graph == '曜日別収益':
+                    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    weekday_profit = filtered_df.groupby('曜日')['利益'].sum().reindex(weekday_order, fill_value=0).reset_index()
+                    chart_weekday = create_chart(
+                        weekday_profit, 'bar', '曜日', '利益', '曜日別収益',
+                        format_y="s", tooltip=['曜日', alt.Tooltip('利益', format=",")]
                     )
-                    st.altair_chart(chart_heatmap_pair_direction, use_container_width=True)
+                    st.altair_chart(chart_weekday, use_container_width=True)
+                
+                elif graph == '時間帯別勝率':
+                    time_order = ['深夜', '午前', '午後', '夜']
+                    time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
+                    chart_time = create_chart(
+                        time_win_rate, 'bar', '時間帯', '勝率', '時間帯別勝率',
+                        color=alt.condition(
+                            alt.datum['勝率'] >= 0.5,
+                            alt.value('#4CAF50'), alt.value('#F44336')
+                        ),
+                        format_y=".0%", tooltip=['時間帯', alt.Tooltip('勝率', format=".1%")]
+                    )
+                    st.altair_chart(chart_time, use_container_width=True)
+                
+                elif graph == '時間帯別収益':
+                    time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(['深夜', '午前', '午後', '夜'], fill_value=0).reset_index()
+                    chart_time = create_chart(
+                        time_profit, 'bar', '時間帯', '利益', '時間帯別収益',
+                        format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
+                    )
+                    st.altair_chart(chart_time, use_container_width=True)
                 
                 elif graph == '時間帯別勝率ヒートマップ':
                     weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -438,7 +494,8 @@ if uploaded_files:
                     heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
                     chart_heatmap_time = create_chart(
                         heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ',
-                        sort_x=time_order, sort_y=weekday_order, color='勝率', tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
+                        sort_x=time_order, sort_y=weekday_order, color='勝率', scheme='redblue',
+                        tooltip=['曜日', '時間帯', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_heatmap_time, use_container_width=True)
                 
@@ -457,38 +514,18 @@ if uploaded_files:
                     ).properties(title='各取引の利益と損失').interactive()
                     st.altair_chart(bar_chart, use_container_width=True)
                 
-                elif graph == '時間帯別収益':
-                    time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(['深夜', '午前', '午後', '夜'], fill_value=0).reset_index()
-                    chart_time = create_chart(
-                        time_profit, 'bar', '時間帯', '利益', '時間帯別収益',
-                        format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
+                elif graph == '取引時間別勝率':
+                    time_order = ['15秒', '30秒', '60秒', '3分', '5分', 'その他']
+                    time_win_rate = filtered_df.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
+                    chart_time_win_rate = create_chart(
+                        time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率',
+                        color=alt.condition(
+                            alt.datum['勝率'] >= 0.5,
+                            alt.value('#4CAF50'), alt.value('#F44336')
+                        ),
+                        format_y=".0%", tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")]
                     )
-                    st.altair_chart(chart_time, use_container_width=True)
-                
-                elif graph == '通貨ペア別収益':
-                    pair_profit = filtered_df.groupby('取引銘柄')['利益'].sum().sort_values(ascending=False).reset_index().rename(columns={'取引銘柄': '通貨ペア'})
-                    chart_pair = create_chart(
-                        pair_profit, 'bar', '通貨ペア', '利益', '通貨ペア別収益',
-                        format_y="s", tooltip=['通貨ペア', alt.Tooltip('利益', format=",")]
-                    )
-                    st.altair_chart(chart_pair, use_container_width=True)
-                
-                elif graph == '曜日別収益':
-                    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                    weekday_profit = filtered_df.groupby('曜日')['利益'].sum().reindex(weekday_order, fill_value=0).reset_index()
-                    chart_weekday = create_chart(
-                        weekday_profit, 'bar', '曜日', '利益', '曜日別収益',
-                        format_y="s", tooltip=['曜日', alt.Tooltip('利益', format=",")]
-                    )
-                    st.altair_chart(chart_weekday, use_container_width=True)
-                
-                elif graph == '取引方向別収益':
-                    direction_profit = filtered_df.groupby('HIGH/LOW')['利益'].sum().reindex(['HIGH', 'LOW'], fill_value=0).reset_index()
-                    chart_direction = create_chart(
-                        direction_profit, 'bar', 'HIGH/LOW', '利益', '取引方向別収益',
-                        format_y="s", tooltip=['HIGH/LOW', alt.Tooltip('利益', format=",")]
-                    )
-                    st.altair_chart(chart_direction, use_container_width=True)
+                    st.altair_chart(chart_time_win_rate, use_container_width=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
         
