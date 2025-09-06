@@ -119,14 +119,14 @@ def create_chart(df, chart_type, x_col, y_col, title, **kwargs):
         )
     if chart_type == "bar":
         chart = alt.Chart(df).mark_bar().encode(
-            x=alt.X(x_col, title=kwargs.get('x_title')),
+            x=alt.X(x_col, title=kwargs.get('x_title'), sort=kwargs.get('sort_x')),
             y=alt.Y(y_col, title=kwargs.get('y_title'), axis=alt.Axis(format=kwargs.get('format_y', ''))),
             color=kwargs.get('color'),
             tooltip=kwargs.get('tooltip')
         ).properties(title=title)
     elif chart_type == "line":
         chart = alt.Chart(df).mark_line().encode(
-            x=alt.X(x_col, title=kwargs.get('x_title')),
+            x=alt.X(x_col, title=kwargs.get('x_title'), sort=kwargs.get('sort_x')),
             y=alt.Y(y_col, title=kwargs.get('y_title'), axis=alt.Axis(format=kwargs.get('format_y', ''))),
             tooltip=kwargs.get('tooltip')
         ).properties(title=title)
@@ -449,7 +449,11 @@ if uploaded_files:
                     weekday_win_rate = filtered_df.groupby('曜日')['結果(数値)'].mean().reindex(weekday_order, fill_value=0).reset_index().rename(columns={'曜日': '曜日', '結果(数値)': '勝率'})
                     chart_weekday = create_chart(
                         weekday_win_rate, 'bar', '曜日', '勝率', '曜日別勝率',
-                        color=alt.Color('曜日', scale=alt.Scale(scheme='category10')),
+                        sort_x=weekday_order,
+                        color=alt.Color('曜日', scale=alt.Scale(
+                            domain=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+                            range=['#4682B4', '#FF4500', '#00CED1', '#228B22', '#FFD700', '#8B4513', '#FFFF00']
+                        )),
                         format_y=".0%", tooltip=['曜日', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_weekday, use_container_width=True)
@@ -459,7 +463,11 @@ if uploaded_files:
                     weekday_profit = filtered_df.groupby('曜日')['利益'].sum().reindex(weekday_order, fill_value=0).reset_index()
                     chart_weekday = create_chart(
                         weekday_profit, 'bar', '曜日', '利益', '曜日別収益',
-                        color=alt.Color('曜日', scale=alt.Scale(scheme='category10')),
+                        sort_x=weekday_order,
+                        color=alt.Color('曜日', scale=alt.Scale(
+                            domain=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+                            range=['#4682B4', '#FF4500', '#00CED1', '#228B22', '#FFD700', '#8B4513', '#FFFF00']
+                        )),
                         format_y="s", tooltip=['曜日', alt.Tooltip('利益', format=",")]
                     )
                     st.altair_chart(chart_weekday, use_container_width=True)
@@ -469,7 +477,11 @@ if uploaded_files:
                     time_win_rate = filtered_df.groupby('時間帯')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'時間帯': '時間帯', '結果(数値)': '勝率'})
                     chart_time = create_chart(
                         time_win_rate, 'bar', '時間帯', '勝率', '時間帯別勝率',
-                        color=alt.Color('時間帯', scale=alt.Scale(scheme='category10')),
+                        sort_x=time_order,
+                        color=alt.Color('時間帯', scale=alt.Scale(
+                            domain=['深夜', '午前', '午後', '夜'],
+                            range=['#1E90FF', '#FFA500', '#F44336', '#4CAF50']
+                        )),
                         format_y=".0%", tooltip=['時間帯', alt.Tooltip('勝率', format=".1%")]
                     )
                     st.altair_chart(chart_time, use_container_width=True)
@@ -479,15 +491,19 @@ if uploaded_files:
                     time_profit = filtered_df.groupby('時間帯')['利益'].sum().reindex(time_order, fill_value=0).reset_index()
                     chart_time = create_chart(
                         time_profit, 'bar', '時間帯', '利益', '時間帯別収益',
-                        color=alt.Color('時間帯', scale=alt.Scale(scheme='category10')),
+                        sort_x=time_order,
+                        color=alt.Color('時間帯', scale=alt.Scale(
+                            domain=['深夜', '午前', '午後', '夜'],
+                            range=['#1E90FF', '#FFA500', '#F44336', '#4CAF50']
+                        )),
                         format_y="s", tooltip=['時間帯', alt.Tooltip('利益', format=",")]
                     )
                     st.altair_chart(chart_time, use_container_width=True)
                 
                 elif graph == '時間帯別勝率ヒートマップ':
                     weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                    time_order = ['深夜', '午前', '午後', '夜']
-                    index = pd.MultiIndex.from_product([filtered_df['曜日'].unique(), filtered_df['時間帯'].cat.categories], names=['曜日', '時間帯'])
+                    time_order = ['午前', '午後', '夜', '深夜']
+                    index = pd.MultiIndex.from_product([filtered_df['曜日'].unique(), time_order], names=['曜日', '時間帯'])
                     heatmap_data_time = filtered_df.groupby(['曜日', '時間帯'])['結果(数値)'].mean().reindex(index, fill_value=0).reset_index().rename(columns={'結果(数値)': '勝率'})
                     chart_heatmap_time = create_chart(
                         heatmap_data_time, 'heatmap', '時間帯', '曜日', '曜日・時間帯別勝率ヒートマップ',
@@ -516,6 +532,7 @@ if uploaded_files:
                     time_win_rate = filtered_df.groupby('取引時間')['結果(数値)'].mean().reindex(time_order, fill_value=0).reset_index().rename(columns={'取引時間': '取引時間', '結果(数値)': '勝率'})
                     chart_time_win_rate = create_chart(
                         time_win_rate, 'bar', '取引時間', '勝率', '取引時間別勝率',
+                        sort_x=time_order,
                         color=alt.Color('取引時間', scale=alt.Scale(scheme='category10')),
                         format_y=".0%", tooltip=['取引時間', alt.Tooltip('勝率', format=".1%")]
                     )
